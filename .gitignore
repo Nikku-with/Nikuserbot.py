@@ -1,0 +1,25 @@
+# ── Sessions / secrets (kabhi commit mat karna) ──
+*.session
+*.session-journal
+.env
+config.json
+my.telegram.org
+
+# ── Runtime data ──
+data/
+downloads/
+temp/
+*.json
+!package.json
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ── OS ──
+.DS_Store
+Thumbs.db
