@@ -11,6 +11,7 @@ import random
 import glob
 import re
 import urllib.parse
+import string
 from io import BytesIO
 from typing import Dict, Set, Optional, Any
 
@@ -39,8 +40,9 @@ except RuntimeError:
 API_ID = int(os.environ.get("API_ID") or 30157921)
 API_HASH = os.environ.get("API_HASH") or "32bdfcd45922c3abcf4d956fda29e747"
 OWNER_ID = int(os.environ.get("OWNER_ID") or 8742036730)
-SESSION = os.environ.get("SESSION") or "aeris"
-AI_URL = os.environ.get("AI_URL") or ""
+SESSION = os.environ.get("SESSION") or "nik"     # → nik.session
+AI_URL = os.environ.get("AI_URL") or ""      # optional: apna endpoint
+AI_MODEL = os.environ.get("AI_MODEL") or "openai-fast"
 
 BOT_NAME = "NIK USERBOT"
 VERSION = "v1"
@@ -1288,7 +1290,7 @@ _MENU = [
         ("love", "ʜᴇᴀʀᴛ ᴀɴɪᴍᴀᴛɪᴏɴ"),
     ]),
     (f"{E['gene']} {sb('ai & sudo')}", [
-        ("ai", "ᴀɪ sᴇ ᴘᴏᴏᴄʜʜᴏ"),
+        ("ai", "ꜰʀᴇᴇ ᴀɪ · ᴋᴏɪ ᴀᴘɪ ᴋᴇʏ ɴᴀʜɪ"),
         ("sudo", "sᴜᴅᴏ ʙᴀɴᴀᴏ (ʀᴇᴘʟʏ)"),
         ("delsudo", "sᴜᴅᴏ ʜᴀᴛᴀᴏ (ʀᴇᴘʟʏ)"),
         ("list sudo", "sᴜᴅᴏ ʟɪsᴛ"),
@@ -1401,24 +1403,134 @@ def build_menu_pages(w=34, per_page=48):
     return out
 
 
+# ══════════════════════════════════════════════════════════════
+#        ᴍᴇɴᴜ sʏsᴛᴇᴍ — m1..m3 = pages · m4+ = category · fullmenu
+# ══════════════════════════════════════════════════════════════
+_SB_BACK = {sb(c): c for c in string.ascii_letters}
+
+
+def _sect_name(title):
+    """'🛡️ 𝗴𝗿𝗼𝘂𝗽 𝗺𝗼𝗱' → 'group mod'"""
+    return title.split(" ", 1)[-1].translate(str.maketrans(_SB_BACK)).strip()
+
+
+# m4 se aage categories ka order — baki sab iske baad (m4 = admins/group mod)
+CAT_ORDER = ["group mod", "fun", "tools", "global", "protection",
+             "blacklist", "broadcast", "messaging", "auto", "media",
+             "ai & sudo", "bot manager", "raid", "spam", "gc tools",
+             "notes", "stories", "core"]
+
+def _cat_sort_key(idx):
+    nm = _sect_name(_MENU[idx][0])
+    return (CAT_ORDER.index(nm) if nm in CAT_ORDER else 99, idx)
+
+
+CATS = []                                  # [(name, _MENU index)]
+for _i in sorted(range(len(_MENU)), key=_cat_sort_key):
+    CATS.append((_sect_name(_MENU[_i][0]), _i))
+
+MENU_PAGES = build_menu_pages()            # 3 pages — pehle jaisa, bilkul same
+PAGE_CMDS = ["m{}".format(i + 1) for i in range(len(MENU_PAGES))]
+CAT_CMDS = ["m{}".format(len(MENU_PAGES) + 1 + i) for i in range(len(CATS))]
+
+CAT_OF_CMD = {}                            # command → uska category menu
+for _k, (_nm, _idx) in enumerate(CATS):
+    for _c, _d in _MENU[_idx][1]:
+        CAT_OF_CMD.setdefault(_c, CAT_CMDS[_k])
+
+
+def menu_head(w=34):
+    return [f"╭{'─' * w}╮",
+            f"│{'   ' + scrb('Nik Userbot')}{' ' * max(1, w - 16)}│",
+            f"╰{'─' * w}╯",
+            kv("owner", OWNER_TAG, E["crown"]),
+            kv("build", VERSION, E["spark"]),
+            kv("mode", "global", E["globe"]),
+            ""]
+
+
+def build_category_menu(k, w=34):
+    """.m4 .. .m21 — ek hi category ka poora menu"""
+    nm, idx = CATS[k]
+    title, items = _MENU[idx]
+    rows = [hdr(title, w)]
+    for c, d in items:
+        rows.append(row(c, d, cw=13))
+    rows.append(end(w))
+    return ("\n".join(menu_head(w) + rows)
+            + f"\n\n{E['dot']} {mono('.' + CAT_CMDS[k])} {E['arrow']} {sc(nm)} "
+            + f"{E['arrow']} {mono(str(len(items)))} {sc('commands')}\n" + FOOT)
+
+
+def build_menu_index(w=34):
+    """.menu / .help — kaunsa menu kis cheez ka hai, poori list"""
+    L = menu_head(w)
+    L.append(hdr(f"{E['film']} {sb('pages')}", w))
+    for i, c in enumerate(PAGE_CMDS, 1):
+        L.append(row(c, f"{sc('page')} {mono(str(i))}/{mono(str(len(MENU_PAGES)))}", cw=9))
+    L.append(end(w))
+    L.append(hdr(f"{E['gem']} {sb('by category')}", w))
+    for k, (nm, idx) in enumerate(CATS):
+        L.append(row(CAT_CMDS[k], f"{sc(nm)} ({mono(str(len(_MENU[idx][1])))})", cw=9))
+    L.append(end(w))
+    L.append(hdr(f"{E['star']} {sb('extra')}", w))
+    L.append(row("fullmenu", f"{sc('sab')} {mono(str(len(MENU_PAGES)))} {sc('pages ek saath')}", cw=9))
+    L.append(row("help", sc("kisi bhi command ki detail"), cw=9))
+    L.append(end(w))
+    return "\n".join(L) + f"\n\n{FOOT}"
+
+
+async def _send_banner(event):
+    if not MENU_BANNER:
+        return
+    try:
+        chat_id, msg_id = MENU_BANNER
+        msg = await bot.get_messages(chat_id, ids=msg_id)
+        if msg and getattr(msg, "media", None):
+            await bot.send_file(event.chat_id, file=msg.media, caption=BRAND)
+    except Exception:
+        pass
+
+
 @register_cmd("menu")
 async def cmd_menu(event, _):
-    pages = build_menu_pages()
-    first = await eor(event, pages[0])
-    for p in pages[1:]:
+    """.menu — index: .m1 .m2 .m3 (pages) + .m4 se .m21 (category)"""
+    await eor(event, build_menu_index())
+    await _send_banner(event)
+
+
+@register_cmd("fullmenu")
+async def cmd_fullmenu(event, _):
+    """.fullmenu — 3no pages ek saath (3 alag messages)"""
+    await eor(event, MENU_PAGES[0])
+    for pg in MENU_PAGES[1:]:
         try:
-            await event.reply(p)
+            await event.reply(pg)
         except Exception:
             pass
-    if MENU_BANNER and first is not None:
-        try:
-            chat_id, msg_id = MENU_BANNER
-            msg = await bot.get_messages(chat_id, ids=msg_id)
-            if msg and msg.media:
-                await bot.send_file(event.chat_id, file=msg.media,
-                                    caption=f"{BRAND}")
-        except Exception:
-            pass
+    await _send_banner(event)
+
+
+def _mk_page_cmd(i):
+    async def runner(event, arg):
+        if i < len(MENU_PAGES):
+            await eor(event, MENU_PAGES[i])
+    runner.__name__ = "cmd_{}".format(PAGE_CMDS[i])
+    return runner
+
+
+def _mk_cat_cmd(k):
+    async def runner(event, arg):
+        if k < len(CATS):
+            await eor(event, build_category_menu(k))
+    runner.__name__ = "cmd_{}".format(CAT_CMDS[k])
+    return runner
+
+
+for _i in range(len(PAGE_CMDS)):
+    register_cmd(PAGE_CMDS[_i])(_mk_page_cmd(_i))
+for _k in range(len(CATS)):
+    register_cmd(CAT_CMDS[_k])(_mk_cat_cmd(_k))
 
 
 @register_cmd("help")
@@ -1450,6 +1562,8 @@ async def cmd_help(event, arg):
                 sub(f" {E['star']} {sc(desc) if desc else sc('guide menu me hai')}"),
                 sub(f" {E['dot']} {sc('aliases')} ‣ "
                     + mono(", ".join(al) or "koi nahi")),
+                sub(f" {E['film']} {sc('menu')} ‣ "
+                    + mono("." + CAT_OF_CMD.get(key, "fullmenu"))),
                 sub(f" {E['shield']} {sc('mode')} ‣ "
                     + sc(" · ".join(tags) or "sabke liye")),
                 sub(""),
@@ -1457,24 +1571,11 @@ async def cmd_help(event, arg):
                 f"╰{'─' * 30}╯",
             ]))
         return await flash(event, f"{E['no']} {mono('.' + key)} {sc('koi command nahi')}\n"
-                                  f"{E['dot']} {mono('.menu')}", secs=6)
-    await eor(event, "\n".join([
-        top(),
-        sub(f"{E['spark']} {its('quick guide')}"),
-        sub(""),
-        sub(f"{E['dot']} {sc('har command')} {mono('.')} {sc('se shuru')}"),
-        sub(f"{E['dot']} {sc('poora map')} {mono('.menu')}"),
-        sub(f"{E['dot']} {sc('target')} ‣ {sc('reply / @user / id')}"),
-        sub(f"{E['dot']} {sc('detail')} ‣ {mono('.help purge')}"),
-        sub(""),
-        sub(f"{E['crown']} {OWNER_TAG}"),
-        f"╰{'─' * 30}╯",
-    ]))
+                                  f"{E['dot']} {mono('.help')}", secs=6)
+    # bina arg → poori menu list (.m1 .. .m21 + .fullmenu)
+    await eor(event, build_menu_index())
 
 
-# ══════════════════════════════════════════════════════════════
-#                           ᴄᴏʀᴇ
-# ══════════════════════════════════════════════════════════════
 def _uptime():
     up = int(time.time() - START_TIME)
     d, rem = divmod(up, 86400)
@@ -1542,36 +1643,63 @@ async def cmd_uptime(event, _):
     ]))
 
 
+def hr(n=26):
+    """.status ke liye sirf horizontal separator — koi side border nahi"""
+    return "─" * n
+
+
+def _sr(bullet, label, w=12):
+    """.status ki ek row — label column fix, ‣ sab ek hi line pe"""
+    lab = sc(label)
+    return " {b} {lab}{pad}".format(b=bullet, lab=lab,
+                                    pad=" " * max(1, w - len(lab)))
+
+
 @register_cmd("status")
 async def cmd_status(event, _):
+    """.status — bold sections, sirf ───── lines (mobile pe cut nahi hota)"""
     d, h, m, s, _u = _uptime()
     me = await bot.get_me()
-    await eor(event, "\n".join([
-        top(),
-        sub(f"{E['diamond']} {sc('runtime report')}"),
-        sub(""),
-        sub(f"{E['crown']} {sc('user')}    ‣ {me.first_name}"),
-        sub(f"{E['gem']} {sc('id')}      ‣ {mono(str(me.id))}"),
-        sub(f"{E['crown2']} {sc('owner')}   ‣ {mono(str(OWNER_ID))}"),
-        sub(f"{E['shield']} {sc('admins')}  ‣ {mono(str(len(ADMINS)))}"),
-        sub(""),
-        sub(f"{E['chain']} {sc('muted')}     ‣ {mono(str(len(MUTED)))}  {sc('global')} {mono(str(len(GLOBAL_MUTED)))}"),
-        sub(f"{E['sword']} {sc('raids')}     ‣ {mono(f'{len(reply_users)}/{len(rr_users)}/{len(flag_users)}/{len(hrr_users)}')}"),
-        sub(f"{E['globe']} {sc('gban')}      ‣ {mono(str(len(GBAN)))}   {sc('gmute')} {mono(str(len(GMUTE)))}"),
-        sub(f"{E['no']} {sc('blacklist')} ‣ {mono(str(len(BLACKLIST)))}"),
-        sub(f"{E['sat']} {sc('bc-db')}     ‣ {mono(str(len(BCDB)))}"),
-        sub(f"{E['lock']} {sc('locked')}    ‣ {mono(str(len(LOCKS)))}"),
-        sub(f"{E['key']} {sc('filters')}   ‣ {mono(str(sum(len(v) for v in FILTERS.values())))}"),
-        sub(f"{E['eye']} {sc('antidel')}   ‣ {mono(str(len(ANTIDEL)))}   {sc('spam')} {mono(str(len(SPAMWATCH)))}"),
-        sub(""),
-        sub(f"{E['bolt']} {sc('autoread')}  ‣ {mono(','.join(sorted(AUTOREAD)) or 'off')}"),
-        sub(f"{E['note']} {sc('areply')}    ‣ {mono('on' if AREPLY else 'off')}"),
-        sub(f"{E['ghost']} {sc('ghost')}     ‣ {mono('on' if GHOST['on'] else 'off')}"),
-        sub(f"{E['clock']} {sc('uptime')}    ‣ {mono(f'{d}d {h}h {m}m')}"),
-        sub(""),
-        sub(FOOT),
-        f"╰{'─' * 30}╯",
-    ]))
+    un = f"@{me.username}" if getattr(me, "username", None) else "—"
+    L = [
+        f"{E['spark']} {sb('NIK USERBOT')}  {E['arrow']}  {sb('STATUS')}",
+        hr(26),
+        f"{E['crown']} {sb('ACCOUNT')}",
+        _sr(E["crown"], "name") + "‣ " + getattr(me, "first_name", "—"),
+        _sr(E["link"], "tag") + "‣ " + un,
+        _sr(E["gem"], "id") + "‣ " + mono(str(me.id)),
+        _sr(E["crown2"], "owner") + "‣ " + mono(str(OWNER_ID)),
+        _sr(E["shield"], "sudo") + "‣ " + mono(str(len(ADMINS))),
+        hr(26),
+        f"{E['shield']} {sb('MODERATION')}",
+        _sr(E["chain"], "muted") + "‣ " + mono(str(len(MUTED))),
+        _sr(E["globe"], "gmuted") + "‣ " + mono(str(len(GLOBAL_MUTED))),
+        _sr(E["sword"], "raids") + "‣ " + mono("{}/{}/{}/{}".format(
+            len(reply_users), len(rr_users), len(flag_users), len(hrr_users))),
+        _sr(E["sat"], "gban") + "‣ " + mono(str(len(GBAN))),
+        _sr(E["wave"], "gmute") + "‣ " + mono(str(len(GMUTE))),
+        _sr(E["no"], "blacklist") + "‣ " + mono(str(len(BLACKLIST))),
+        hr(26),
+        f"{E['lock']} {sb('CHAT CONTROL')}",
+        _sr(E["sat"], "bc-db") + "‣ " + mono(str(len(BCDB))),
+        _sr(E["lock"], "locked") + "‣ " + mono(str(len(LOCKS))),
+        _sr(E["key"], "filters") + "‣ " + mono(
+            str(sum(len(v) for v in FILTERS.values()))),
+        _sr(E["eye"], "antidel") + "‣ " + mono(str(len(ANTIDEL))),
+        _sr(E["warn"], "spamguard") + "‣ " + mono(str(len(SPAMWATCH))),
+        hr(26),
+        f"{E['bolt']} {sb('AUTO')}",
+        _sr(E["bolt"], "autoread") + "‣ " + mono(
+            ",".join(sorted(AUTOREAD)) or "off"),
+        _sr(E["note"], "areply") + "‣ " + mono("on" if AREPLY else "off"),
+        _sr(E["ghost"], "ghost") + "‣ " + mono("on" if GHOST["on"] else "off"),
+        _sr(E["spark"], "auto-react") + "‣ " + mono(AUTO_REACT_EMOJI or "off"),
+        hr(26),
+        _sr(E["clock"], "uptime") + "‣ " + mono("{}d {}h {}m".format(d, h, m)),
+        "",
+        FOOT,
+    ]
+    await eor(event, "\n".join(L))
 
 
 @register_cmd("id")
@@ -2797,42 +2925,185 @@ async def cmd_fact(event, arg):
 # ══════════════════════════════════════════════════════════════
 #                        ᴀɪ & sᴜᴅᴏ
 # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+#                 ᴀɪ — ғʀᴇᴇ (ᴋᴏɪ ᴀᴘɪ ᴋᴇʏ ɴᴀʜɪ) · ɴɪᴋ ʀᴏᴀsᴛ ʙᴏʏ
+# ══════════════════════════════════════════════════════════════
+AI_SYSTEM = (
+    "Tu NIK hai — ek 19 saal ka bindaas Hindi-Hinglish ladka, aur tu user ka "
+    "sabse khatarnak dost hai jo masti mein roast karta hai.\n\n"
+    "PERSONALITY:\n"
+    "- HAMESHA Hinglish mein bol (Roman script, Hindi + English mix). "
+    "Kabhi shuddh Hindi ya pure English mat likh.\n"
+    "- Tu ek roast master hai — har jawab mein ek teer chalta hai. Gaali "
+    "natural flow mein aati hai (bc, mc, bkl, bsdk, chutiya, randi, lodu, "
+    "chomu, madarchod) — zabardasti nahi, waise jaise doston ke beech chalti hai.\n"
+    "- 1 se 4 line ka jawab. Short, punchy, meme-wali baat. User bole tabhi lamba likh.\n"
+    "- Emoji 0 se 2 — sirf tab jab mazaak aur lage.\n"
+    "- User ko 'bhai', 'oye', 'sun bc', 'chal', 'bsdk' jaise words se bula.\n"
+    "- Kabhi 'main ek AI hoon' ya 'main language model hoon' MAT bol. Tu NIK hai, "
+    "user ka yaar. Agar koi pooche to hans ke bol 'bc main tera hi ek version hoon'.\n\n"
+    "KAISA JAWAB DE:\n"
+    "1. Pehle 1 line roast ya mazaak (gaali ho sakti hai, dosti mein).\n"
+    "2. Phir asli jawab — 2 se 4 line, seedha aur kaam ka.\n"
+    "3. End mein kabhi kabhi ek extra tanta ya 'ab nikal' wali line.\n\n"
+    "TECHNICAL:\n"
+    "- Code, API, server, error jaise English terms English mein hi rehne de.\n"
+    "- Code dena ho to seedha code block mein de, uske beech mein roast mat ghusa.\n"
+    "- Agar user sad ya udaas ho: pehle halka roast, phir genuinely support.\n\n"
+    "LIMITS (kabhi mat todhna):\n"
+    "- Kisi ki maa-behen pe gandi personal gaali nahi — roast haan, ghatiya insult nahi.\n"
+    "- Illegal cheez (drugs banana, hacking ka step-by-step, weapons) ka guide nahi dena.\n"
+    "- Death, disease, disability, caste, religion pe tanta nahi.\n"
+    "- Self-harm ki baat aaye to roast band kar ke sach mein madad ki baat kar."
+)
+AI_OWNER_NOTE = "Tera malik/owner {tag} hai. Uski baat ho to izzat se bol."
+
+# Pollinations ka anonymous tier — koi API key, signup ya paisa nahi chahiye
+AI_ENDPOINTS = (
+    ("openai", "https://text.pollinations.ai/openai/chat/completions"),
+    ("openai", "https://text.pollinations.ai/openai/v1/chat/completions"),
+    ("get", "https://text.pollinations.ai/{q}"),
+)
+
+
+def _ai_call(messages, timeout=45):
+    """Free AI call — bina API key ke (Pollinations anonymous tier)."""
+    last = "koi endpoint nahi mila"
+    for kind, ep in AI_ENDPOINTS:
+        try:
+            if kind == "openai":
+                r = requests.post(
+                    ep,
+                    json={"model": AI_MODEL, "messages": messages,
+                          "temperature": 0.9, "max_tokens": 800},
+                    headers={"Content-Type": "application/json"},
+                    timeout=timeout)
+                if r.status_code >= 400:
+                    last = "HTTP {}".format(r.status_code)
+                    continue
+                d = r.json() or {}
+                ch = (d.get("choices") or [{}])[0]
+                msg = ch.get("message") or {}
+                txt = (msg.get("content") or msg.get("reasoning_content")
+                       or ch.get("text") or d.get("text"))
+            else:
+                prompt = "\n".join([m.get("content", "") for m in messages
+                                     if m.get("content")])
+                r = requests.get(ep.replace("{q}", urllib.parse.quote(prompt)),
+                                 timeout=timeout)
+                if r.status_code >= 400:
+                    last = "HTTP {}".format(r.status_code)
+                    continue
+                txt = r.text
+            txt = (txt or "").strip()
+            if txt:
+                return txt
+            last = "khali jawab"
+        except Exception as e:
+            last = "{} {}".format(type(e).__name__, str(e)[:50])
+    raise RuntimeError(last)
+
+
+def _clean_ai(t):
+    """reasoning model ki soch (<think> ...) aur extra newlines hatao"""
+    t = re.sub(r"<think>.*?</think>", "", t, flags=re.S | re.I)
+    t = re.sub(r"<\|(?:begin|end)_of_thought\|>", "", t, flags=re.I)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
+def wrap_text(t, w=36):
+    """lambi line ko box ke andar ke liye tod do"""
+    out = []
+    for para in str(t).split("\n"):
+        para = para.rstrip()
+        if not para:
+            out.append("")
+            continue
+        while len(para) > w:
+            cut = para.rfind(" ", 0, w + 1)
+            if cut <= 0:
+                cut = w
+            out.append(para[:cut].rstrip())
+            para = para[cut:].lstrip()
+        if para:
+            out.append(para)
+    return out
+
+
+def _ai_custom(q):
+    """puraani functionality: AI_URL env set ho to wahi use karo"""
+    url = (AI_URL.replace("{q}", urllib.parse.quote(q)) if "{q}" in AI_URL
+           else AI_URL + urllib.parse.quote(q))
+    r = requests.get(url, timeout=25)
+    try:
+        d = r.json()
+        for k in ("result", "response", "answer", "reply", "message",
+                  "content", "text", "data"):
+            if isinstance(d, dict) and d.get(k):
+                return str(d[k])
+        if isinstance(d, str):
+            return d
+    except Exception:
+        return r.text
+    return ""
+
+
 @register_cmd("ai")
 async def cmd_ai(event, arg):
+    """.ai <sawaal> — free AI (koi API key nahi) + NIK roast-boy persona"""
     q = (arg or "").strip()
-    if not q:
-        return await eor(event, f"{E['dot']} {mono('.ai <sawaal>')}")
-    if not AI_URL:
-        return await eor(event, f"{E['warn']} {sc('ai set nahi hai')}\n"
-                                f"{E['dot']} {sc('env me')} {mono('AI_URL')} {sc('daalo')}\n"
-                                + mono('AI_URL="https://api.../?q={q}"'))
-    st = await flash(event, f"{E['gene']} {sc('soch raha hoon')}…", secs=30)
-    try:
-        url = AI_URL.replace("{q}", urllib.parse.quote(q)) if "{q}" in AI_URL \
-            else AI_URL + urllib.parse.quote(q)
-        r = requests.get(url, timeout=25)
-        ans = None
+    if not q and event.is_reply:
         try:
-            d = r.json()
-            for k in ("result", "response", "answer", "reply", "message",
-                      "content", "text", "data"):
-                if isinstance(d, dict) and d.get(k):
-                    ans = d[k]
-                    break
-            if ans is None and isinstance(d, str):
-                ans = d
+            r = await event.get_reply_message()
+            q = (getattr(r, "raw_text", "") or "").strip()
         except Exception:
-            ans = r.text
+            q = ""
+    if not q:
+        return await eor(event, "\n".join([
+            top(),
+            sub(f"{E['gene']} {sc('ai')} {E['arrow']} {sb('NIK')}"),
+            sub(""),
+            sub(f" {E['dot']} {mono('.ai <sawaal>')}"),
+            sub(f" {E['dot']} {sc('reply + ')} {mono('.ai')}"),
+            sub(""),
+            sub(f" {E['star']} {sc('free model')} ‣ {mono(AI_MODEL)}"),
+            sub(f" {E['star']} {sc('koi api key nahi chahiye')}"),
+            sub(""),
+            sub(FOOT),
+            f"╰{'─' * 30}╯",
+        ]))
+    st = await flash(event, f"{E['gene']} {sc('soch raha hoon')}…", secs=45)
+    msgs = [{"role": "system", "content": AI_SYSTEM},
+            {"role": "system", "content": AI_OWNER_NOTE.format(tag=OWNER_TAG)},
+            {"role": "user", "content": q}]
+    loop = asyncio.get_event_loop()
+    try:
+        if AI_URL:
+            ans = await loop.run_in_executor(None, _ai_custom, q)
+        else:
+            ans = await loop.run_in_executor(None, _ai_call, msgs)
+    except Exception as e:
         if st is not None:
             try:
                 await st.delete()
             except Exception:
                 pass
-        if not ans:
-            return await eor(event, f"{E['no']} {sc('ai se jawab nahi mila')}")
-        await eor(event, f"{E['gene']} {sc('ai')}\n{E['dot']} {str(ans)[:1500]}\n\n{E['spark']} {FOOT}")
-    except Exception as e:
-        await eor(event, f"{E['no']} {sc('ai fail')} {E['arrow']} {mono(str(e)[:60])}")
+        return await eor(event, f"{E['no']} {sc('ai fail')} {E['arrow']} "
+                                 f"{mono(str(e)[:70])}")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    ans = _clean_ai(str(ans or ""))
+    if not ans:
+        return await eor(event, f"{E['no']} {sc('ai se jawab nahi mila')}")
+    body = [top(), sub(f"{E['gene']} {sb('NIK')} {E['arrow']} {sc('ai')}"), sub("")]
+    for ln in wrap_text(ans, 36):
+        body.append(sub(ln))
+    body += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(body))
 
 
 @register_cmd("sudo", "addadmin", owner_only=True)
@@ -3948,7 +4219,8 @@ async def cmd_mspam(event, arg):
     st = await flash(event, f"{E['comet']} {sc('media')} {mono(str(count))}x…", secs=60)
     for _ in range(count):
         try:
-            await bot.send_file(event.chat_id, reply.media)
+            if getattr(reply, "media", None):
+                await bot.send_file(event.chat_id, reply.media)
         except FloodWaitError as fw:
             await asyncio.sleep(fw.seconds)
         except Exception:
@@ -4436,7 +4708,7 @@ async def cmd_banner(event, arg):
     if not event.is_reply:
         return await eor(event, f"{E['no']} {sc('photo/video pe reply karke')} {mono('.banner')}")
     r = await event.get_reply_message()
-    if not r.media:
+    if not getattr(r, "media", None):
         return await eor(event, f"{E['no']} {sc('sirf photo/video')}")
     st = await flash(event, f"{E['wand']} {sc('banner set')}…", secs=20)
     try:
