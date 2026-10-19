@@ -1,6 +1,6 @@
 # ══════════════════════════════════════════════════════════════
-#   ♛  NIK USERBOT  ♛        @Nikkkwa
-#   Single-file Telethon userbot  ·  Global mode  ·  v1
+#   ✧ 𝓝𝓲𝓴 𝓤𝓼𝓮𝓻𝓫𝓸𝓽 ✧        @Nikkkwa
+#   Single-file Telethon userbot  ·  ɢʟᴏʙᴀʟ  ·  ᴠ1
 # ══════════════════════════════════════════════════════════════
 
 import asyncio
@@ -9,6 +9,8 @@ import time
 import json
 import random
 import glob
+import re
+import urllib.parse
 from io import BytesIO
 from typing import Dict, Set, Optional, Any
 
@@ -19,7 +21,7 @@ from gtts import gTTS
 from telethon import TelegramClient, events, functions, types
 from telethon.errors import FloodWaitError, RPCError, MessageNotModifiedError
 
-# ── event-loop guard (Python 3.12+ / Termux / Pydroid) ──
+# ── event-loop guard (Python 3.12+ / mobile runtimes) ──
 try:
     asyncio.get_running_loop()
 except RuntimeError:
@@ -32,20 +34,22 @@ except RuntimeError:
 
 
 # ══════════════════════════════════════════════════════════════
-#                          CONFIG
+#                          ᴄᴏɴғɪɢ
 # ══════════════════════════════════════════════════════════════
-# Credentials env se aayengi; fallback wahi purane values hain.
 API_ID = int(os.environ.get("API_ID") or 30157921)
 API_HASH = os.environ.get("API_HASH") or "32bdfcd45922c3abcf4d956fda29e747"
 OWNER_ID = int(os.environ.get("OWNER_ID") or 8742036730)
 SESSION = os.environ.get("SESSION") or "aeris"
+AI_URL = os.environ.get("AI_URL") or ""
 
 BOT_NAME = "NIK USERBOT"
 VERSION = "v1"
 OWNER_TAG = "@Nikkkwa"
 PREFIX = "."
-LOCK_DELAY = 0.3          # locked chat me msg delete hone ka delay (seconds)
-STORY_DELAY = 1.6         # animation frame delay (seconds)
+
+TMP_TTL = 3           # har working/status message 3 sec me udd jata hai
+LOCK_DELAY = 0.3      # locked chat me message delete hone ka delay
+STORY_DELAY = 1.6     # animation frame delay
 START_TIME = time.time()
 
 BASE_DIR = os.getcwd()
@@ -56,7 +60,6 @@ for _p in (DATA_DIR, DOWNLOAD_PATH, TEMP_PATH):
     os.makedirs(_p, exist_ok=True)
 
 SESSION_IS_STRING = len(SESSION) > 30 and ":" in SESSION
-print(f"♛ {BOT_NAME} {VERSION} | {OWNER_TAG} | session: {SESSION[:12]}...")
 
 try:
     if SESSION_IS_STRING:
@@ -74,7 +77,176 @@ except Exception as _e:
 
 
 # ══════════════════════════════════════════════════════════════
-#                          STORAGE
+#                       sᴛʏʟᴇ ᴋɪᴛ
+# ══════════════════════════════════════════════════════════════
+# Unicode font engine — poore bot ka text isi se guzar-ta hai.
+
+_SANS_B = (0x1D5D4, 0x1D5EE, 0x1D7EC)   # 𝗔𝗮𝟬
+_SERIF_B = (0x1D400, 0x1D41A, 0x1D7CE)   # 𝐀𝐚𝟎
+_SERIF_I = (0x1D434, 0x1D44E, None)      # 𝐴𝑎
+_SERIF_BI = (0x1D468, 0x1D482, None)     # 𝑨𝒂
+_MONO = (0x1D670, 0x1D68A, 0x1D7F6)      # 𝙰𝚊𝟶
+_SCRIPT = (0x1D49C, 0x1D4B6, None)       # 𝒜𝒶
+_SCRIPT_B = (0x1D4D0, 0x1D4EA, None)     # 𝓐𝓪
+_DBL = (0x1D538, 0x1D552, 0x1D7D8)       # 𝔸𝕒
+_FRK = (0x1D504, 0x1D51E, None)          # 𝔄𝔞
+
+_EXCEPT = {
+    _SCRIPT: {"B": "ℬ", "E": "ℰ", "F": "ℱ", "H": "ℋ", "I": "ℐ",
+              "L": "ℒ", "M": "ℳ", "R": "ℛ", "e": "ℯ", "g": "ℊ", "o": "ℴ"},
+    _SCRIPT_B: {"B": "𝓑", "E": "𝓔", "F": "𝓕", "H": "𝓗", "I": "𝓘",
+                "L": "𝓛", "M": "𝓜", "R": "𝓡"},
+    _DBL: {"C": "ℂ", "H": "ℍ", "N": "ℕ", "P": "ℙ", "Q": "ℚ", "R": "ℝ", "Z": "ℤ"},
+    _FRK: {"C": "ℭ", "H": "ℌ", "I": "ℑ", "R": "ℜ", "Z": "ℨ"},
+    _SERIF_I: {"h": "ℎ"},
+}
+
+_SC_TAB = str.maketrans("abcdefghijklmnopqrstuvwxyz",
+                        "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘQʀꜱᴛᴜᴠᴡxʏᴢ")
+
+
+def _xf(t, spec):
+    up, lo, dg = spec
+    ex = _EXCEPT.get(spec, {})
+    out = []
+    for ch in str(t):
+        if ch in ex:
+            out.append(ex[ch])
+            continue
+        o = ord(ch)
+        if 65 <= o <= 90:
+            out.append(chr(up + o - 65))
+        elif 97 <= o <= 122:
+            out.append(chr(lo + o - 97))
+        elif 48 <= o <= 57 and dg:
+            out.append(chr(dg + o - 48))
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def sc(t):    return str(t).translate(_SC_TAB)      # ᴀʙᴄ small caps
+def sb(t):    return _xf(t, _SANS_B)                # 𝗔𝗕𝗖
+def bs(t):    return _xf(t, _SERIF_B)               # 𝐀𝐁𝐂
+def its(t):   return _xf(t, _SERIF_I)               # 𝐴𝐵𝐶
+def sbi(t):   return _xf(t, _SERIF_BI)              # 𝑨𝑩𝑪
+def mono(t):  return _xf(t, _MONO)                  # 𝙰𝙱𝙲
+def scr(t):   return _xf(t, _SCRIPT)                # 𝒜𝓁𝓁
+def scrb(t):  return _xf(t, _SCRIPT_B)              # 𝓐𝓑𝓒
+def dbl(t):   return _xf(t, _DBL)                   # 𝔸𝔹ℂ
+
+E = {
+    "link": "🏷️",
+    "star": "✦", "diamond": "❖", "dot": "⟡", "bolt": "⌁", "crown": "♛",
+    "shield": "🛡️", "eye": "🧿", "chain": "⛓️", "sat": "📡", "globe": "🌐",
+    "sword": "⚔️", "comet": "☄️", "gear": "⚙️", "wand": "🪄", "dice": "✹",
+    "gene": "🧬", "node": "⟐", "tool": "⌬", "key": "🗝️", "film": "✺",
+    "moon": "☾", "spark": "✧", "arrow": "‣", "lock": "🔒", "fire": "🔥",
+    "warn": "⚠️", "ok": "✅", "no": "❌", "wait": "⏳", "skull": "☠️",
+    "ghost": "👻", "note": "🗒️", "save": "💾", "trash": "🗑️", "bot": "🤖",
+    "rocket": "🚀", "clock": "🕰️", "heart": "🖤", "crown2": "🔱", "gem": "💠",
+    "eye2": "🪬", "ring": "💍", "flower": "❀", "wave": "🌊", "leaf": "❦",
+}
+
+
+def top(w=30):
+    """masthead — har panel ke upar"""
+    return (f"╭{'─' * w}╮\n"
+            f"│{scrb('  Nik Userbot').center(w - 2)}│\n"
+            f"╰{'─' * w}╯")
+
+
+def sub(line, w=30):
+    """box row — truncate mat karo, align_panel() chaudai barabar karega"""
+    return f"│{('  ' + str(line)).ljust(w - 1)}│"
+
+
+def box(lines, w=30):
+    out = [f"╭{'─' * w}╮"]
+    for ln in lines:
+        out.append(f"│{('  ' + ln).ljust(w - 1)}│")
+    out.append(f"╰{'─' * w}╯")
+    return "\n".join(out)
+
+
+def hdr(title, w=30):
+    """section header: ┌─〔 𝗧𝗜𝗧𝗟𝗘 〕────"""
+    body = f"〔 {sb(str(title).upper())} 〕"
+    pad = max(1, w - len(str(title)) - 6)
+    return f"┌─{body}" + "─" * pad
+
+
+def end(w=30):
+    return "└" + "─" * w
+
+
+def row(cmd, desc, bullet=None, cw=12):
+    """ek command + uske niche guide line (mobile friendly)"""
+    b = bullet or E["star"]
+    pad = max(1, cw - len(cmd))
+    return f"│ {b} {mono(cmd)}{' ' * pad}‣ {sc(desc)}"
+
+
+def note(text, bullet=None):
+    b = bullet or E["dot"]
+    return f"│ {b} {sc(text)}"
+
+
+def kv(label, value, bullet=None, lw=10):
+    b = bullet or E["diamond"]
+    pad = max(1, lw - len(label))
+    return f" {b} {sc(label)}{' ' * pad}‣ {mono(str(value))}"
+
+
+def cap(text):
+    return f"{E['spark']} {its(text)}"
+
+
+BRAND = f"{E['spark']} {scr('Nik Userbot')} {E['spark']}"
+FOOT = f"{E['dot']} {sc('powered by')} {OWNER_TAG}"
+
+
+def block(title, rows, w=30):
+    return "\n".join([hdr(title, w)] + list(rows) + [end(w)])
+
+
+PANEL_MAX = 42          # mobile screen ke hisaab se max inner chaudai
+
+
+def align_panel(text):
+    """Box ki har line ki chaudai barabar kar do.
+
+    Lambi description / @username wali line pe `│ ... │` border toot jata tha —
+    ab poori box usi line ke hisaab se chaudi ho jati hai (ya line truncate).
+    """
+    if not text or "│" not in text:
+        return text
+    lines = text.split("\n")
+
+    def boxed(s):
+        return (s[:1] in ("╭", "╰") and s[-1:] in ("╮", "╯")) or \
+               (s[:1] == "│" and s[-1:] == "│")
+
+    if not any(l[:1] == "│" and l[-1:] == "│" for l in lines):
+        return text
+    w = max(len(l) - 2 for l in lines if l[:1] == "│" and l[-1:] == "│")
+    w = min(w, PANEL_MAX)
+    out = []
+    for l in lines:
+        if l[:1] == "│" and l[-1:] == "│":
+            body = l[1:-1]
+            if len(body) > w:
+                body = body[:w - 1] + "…"
+            out.append("│" + body.ljust(w) + "│")
+        elif boxed(l):
+            out.append(l[0] + "─" * w + l[-1])
+        else:
+            out.append(l)
+    return "\n".join(out)
+
+
+# ══════════════════════════════════════════════════════════════
+#                          sᴛᴏʀᴀɢᴇ
 # ══════════════════════════════════════════════════════════════
 F_ADMINS = "admins.json"
 F_NOTES = "notes.json"
@@ -91,9 +263,14 @@ F_SAVED_CH = "saved_channel.json"
 F_SAVED_MSGS = "saved_msgs.json"
 F_AUTOBR = "autobc.json"
 F_AUTOFW = "autofw.json"
+F_ANTIDEL = "antidel.json"
+F_SPAMWATCH = "spamwatch.json"
+F_RLOCK = "rlock.json"
+F_BOTS = "bots.json"
+F_GAMEBOT = "gamebot.json"
 
 
-def load_json(name: str, default: Any):
+def load_json(name, default):
     path = os.path.join(DATA_DIR, name)
     try:
         if os.path.isfile(path):
@@ -104,7 +281,7 @@ def load_json(name: str, default: Any):
     return default
 
 
-def save_json(name: str, data: Any) -> bool:
+def save_json(name, data):
     path = os.path.join(DATA_DIR, name)
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -116,7 +293,7 @@ def save_json(name: str, data: Any) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════
-#                        RUNTIME STATE
+#                       ʀᴜɴᴛɪᴍᴇ sᴛᴀᴛᴇ
 # ══════════════════════════════════════════════════════════════
 ADMINS: Set[int] = set(int(x) for x in load_json(F_ADMINS, []))
 NOTES: Dict[int, str] = {int(k): v for k, v in load_json(F_NOTES, {}).items()}
@@ -133,32 +310,49 @@ SAVED_CHANNEL = load_json(F_SAVED_CH, None)
 SAVED_MSGS: list = load_json(F_SAVED_MSGS, [])
 
 AUTOBR: Dict[str, Any] = load_json(F_AUTOBR, {
-    "on": False, "chat_id": None, "msg_id": None, "text": "", "delay": 120,
-})
+    "on": False, "chat_id": None, "msg_id": None, "text": "", "delay": 120})
 AUTOFW: Dict[str, Any] = load_json(F_AUTOFW, {
-    "on": False, "chat_id": None, "msg_id": None, "delay": 120,
-})
+    "on": False, "chat_id": None, "msg_id": None, "delay": 120})
 AUTOBR_TASK: Optional[asyncio.Task] = None
 AUTOFW_TASK: Optional[asyncio.Task] = None
 
 AREPLY: Optional[str] = load_json(F_AREPLY, None)
-MENU_BANNER = load_json(F_BANNER, None)          # [chat_id, msg_id]
+MENU_BANNER = load_json(F_BANNER, None)
 
-# raid sets
+# protection
+ANTIDEL: Set[int] = set(int(x) for x in load_json(F_ANTIDEL, []))
+SPAMWATCH: Dict[str, Dict[str, int]] = load_json(F_SPAMWATCH, {})
+SPAM_BUCKET: Dict[str, list] = {}
+RLOCK: Dict[str, Dict[str, str]] = load_json(F_RLOCK, {})
+GPFP_TASK: Optional[asyncio.Task] = None
+GPFP_STATE: Dict[str, Any] = {"on": False, "delay": 10, "photos": []}
+
+# bot manager
+SAVED_BOTS: list = load_json(F_BOTS, [])
+GAME_BOT = load_json(F_GAMEBOT, None)
+
+# sub-userbots (multi session)
+SUBBOTS: Dict[str, Any] = {}
+PENDING: Dict[str, Any] = {}
+
+# games
+TTT: Dict[int, Dict[str, Any]] = {}
+
+# raids
 reply_users: Set[int] = set()
 rr_users: Set[int] = set()
 flag_users: Set[int] = set()
 hrr_users: Set[int] = set()
 replygod_users: Set[int] = set()
 replyyorichi_users: Dict[int, Dict[str, Any]] = {}
-replyking_users: Dict[int, Dict[str, Any]] = {}   # .nikreply
+replyking_users: Dict[int, Dict[str, Any]] = {}
 ECHO_USERS: Set[int] = set()
+USER_REPLY: Dict[int, str] = {}     # .arreply — kisi ek user ko fixed reply
 
-MUTED: Set[int] = set()          # local delete-mute (is chat)
-GLOBAL_MUTED: Set[int] = set()   # local delete-mute (har jagah)
+MUTED: Set[int] = set()
+GLOBAL_MUTED: Set[int] = set()
 
 spray_tasks: Dict[int, asyncio.Task] = {}
-spam_tasks: Dict[int, asyncio.Task] = {}
 
 AFK = {"active": False, "reason": None, "since": None}
 AFK_LAST: Dict[int, float] = {}
@@ -177,25 +371,45 @@ CLONE_ACTIVE = False
 LAST_CLONE_ID: Optional[int] = None
 CLONE_DATA: Dict[str, Any] = {}
 
-ADD_BOTS_LIST = ["Nik6_bot", "Nik5bot", "Nik_3_bot", "Nik_2bot", "Nik7bot",
-                 "Nik_8bot", "Nik1bot", "Nik_10ibot", "Nik4_bot", "Nik_6bot"]
+FACTS = [
+    "Honey never spoils — 3000 saal purani honey bhi khane layak mili hai.",
+    "Octopus ke paas 3 dil hote hain.",
+    "Banana botanically ek berry hai, strawberry nahi.",
+    "Tumhare bones steel se zyada strong hote hain (weight ke hisaab se).",
+    "Ek din Mars pe sunrise blue hota hai.",
+    "Sharks dinosaurs se bhi purane hain.",
+    "Human brain lagbhag 75% paani hai.",
+    "Light ko Sun se Earth tak aane me 8 min 20 sec lagte hain.",
+    "Venus ka ek din uske ek saal se zyada lamba hai.",
+    "Butterfly apne pairon se taste karti hai.",
+    "Cows ke paas best friends hote hain.",
+    "Ek cloud ka weight lagbhag 10 lakh kg ho sakta hai.",
+]
 
 
 # ══════════════════════════════════════════════════════════════
-#                           HELPERS
+#                           ʜᴇʟᴘᴇʀs
 # ══════════════════════════════════════════════════════════════
-def is_owner(uid: Optional[int]) -> bool:
+def is_owner(uid):
     return bool(uid) and uid == OWNER_ID
 
 
-def is_admin(uid: Optional[int]) -> bool:
+def is_admin(uid):
     return bool(uid) and (uid == OWNER_ID or uid in ADMINS)
 
 
-async def eor(event, text: str, **kw):
-    """edit-or-reply — hamesha ek Message object return karta hai (ya None)."""
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+async def eor(event, text, **kw):
+    """edit-or-reply → hamesha Message object (ya None)"""
     if not text:
         return None
+    text = align_panel(text)
     try:
         uid = event.sender_id
         now = time.time()
@@ -220,6 +434,38 @@ async def eor(event, text: str, **kw):
         return None
 
 
+async def aedit(msg, text, **kw):
+    """msg.edit() ke liye — align_panel ke saath (border kabhi na toote)"""
+    try:
+        return await msg.edit(align_panel(text), **kw)
+    except Exception:
+        return None
+
+
+async def _del_after(msg, secs):
+    try:
+        await asyncio.sleep(secs)
+        await msg.delete()
+    except Exception:
+        pass
+
+
+async def flash(event, text, secs=None):
+    """working/status message — 3 sec me apne aap udd jata hai"""
+    msg = await eor(event, text)
+    if msg is not None:
+        asyncio.create_task(_del_after(msg, secs or TMP_TTL))
+    return msg
+
+
+async def done(event, text, secs=None):
+    """result message — styled, phir auto-clean"""
+    msg = await eor(event, text)
+    if msg is not None:
+        asyncio.create_task(_del_after(msg, secs or TMP_TTL))
+    return msg
+
+
 async def silent_delete(event):
     try:
         await event.delete()
@@ -227,16 +473,7 @@ async def silent_delete(event):
         pass
 
 
-def safe_int(value, default=0):
-    """int() jo kabhi crash na kare (Telegram kabhi-kabhi peer string deta hai)."""
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-async def get_targets(event, arg: str = "") -> Set[int]:
-    """reply + @user/id/username se user id nikalta hai (khud ko chhod kar)."""
+async def get_targets(event, arg="") -> Set[int]:
     targets: Set[int] = set()
     if event.is_reply:
         try:
@@ -266,8 +503,8 @@ async def get_targets(event, arg: str = "") -> Set[int]:
     return targets
 
 
-async def resolve_uid(event, arg: str = ""):
-    """ek single user id (reply / @user / id) + reply message."""
+async def resolve_uid(event, arg=""):
+    """ek user id — reply / @user / id / DM auto-detect"""
     if event.is_reply:
         try:
             r = await event.get_reply_message()
@@ -284,15 +521,31 @@ async def resolve_uid(event, arg: str = ""):
         except Exception:
             if tok.lstrip("-").isdigit():
                 return int(tok), None
+    # DM me ho to saamne wala hi target
+    try:
+        if getattr(event, "is_private", False) and event.chat_id:
+            cid = int(event.chat_id)
+            if cid > 0 and not event.out:
+                return cid, None
+    except Exception:
+        pass
     return None, None
 
 
-async def play_frames(event, frames, title: str = "", delay: float = 0):
-    """ASCII/emoji story ko frame-by-frame chalata hai.
-    Har frame code-block me jaata hai (isliye art bigadti nahi)
-    aur purane data me likha literal '\\n' bhi theek ho jaata hai."""
+def parse_time(txt):
+    """'10m', '2h', '3d' → seconds"""
+    txt = (txt or "").strip().lower()
+    m = re.match(r"^(\d+)\s*([smhd]?)$", txt)
+    if not m:
+        return None
+    n = int(m.group(1))
+    unit = m.group(2) or "m"
+    return n * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+
+
+async def play_frames(event, frames, title="", delay=0):
     d = delay or STORY_DELAY
-    msg = await eor(event, f"❖ {title} ⟡ starting…")
+    msg = await eor(event, f"{E['film']} {sc(title)} {E['dot']} {sc('starting')}…")
     if msg is None:
         return
     for raw in frames:
@@ -314,7 +567,6 @@ async def play_frames(event, frames, title: str = "", delay: float = 0):
 
 
 def media_kinds(msg) -> Set[str]:
-    """message ke liye lock-types ka set banata hai."""
     kinds = {"all", "msg"}
     media = getattr(msg, "media", None)
     if media is None:
@@ -337,12 +589,9 @@ def media_kinds(msg) -> Set[str]:
                         kinds.add("audio")
                         if getattr(attr, "voice", False):
                             kinds.add("voice")
-                    elif isinstance(attr, types.DocumentAttributeFilename):
-                        kinds.add("document")
                 kinds.add("document")
         elif isinstance(media, types.MessageMediaWebPage):
-            kinds.add("webpage")
-            kinds.add("link")
+            kinds.update({"webpage", "link"})
         elif isinstance(media, types.MessageMediaContact):
             kinds.add("contact")
         elif isinstance(media, types.MessageMediaGeo):
@@ -387,7 +636,7 @@ def autoread_match(event) -> bool:
     return False
 
 
-async def broadcast_targets(kind: str):
+async def broadcast_targets(kind):
     if kind == "db":
         return list(BCDB)
     out = []
@@ -407,8 +656,32 @@ async def broadcast_targets(kind: str):
     return out
 
 
+async def yt_download(url, audio=False):
+    """yt-dlp se media download → local file path"""
+    import yt_dlp
+    loop = asyncio.get_event_loop()
+    tag = str(int(time.time() * 1000))
+    tmpl = os.path.join(TEMP_PATH, f"dl_{tag}_%(id)s.%(ext)s")
+    opts = {"outtmpl": tmpl, "quiet": True, "noplaylist": True, "retries": 2}
+    if audio:
+        opts["format"] = "bestaudio[abr<=128]/bestaudio"
+    else:
+        opts["format"] = "best[filesize<50M]/best"
+
+    def run():
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            if "entries" in info:
+                info = info["entries"][0]
+            return info
+
+    info = await loop.run_in_executor(None, run)
+    files = glob.glob(os.path.join(TEMP_PATH, f"dl_{tag}_*"))
+    return (files[0] if files else None), (info or {})
+
+
 # ══════════════════════════════════════════════════════════════
-#                        TEXT LISTS (raid)
+#                        ᴛᴇxᴛ ʟɪsᴛs
 # ══════════════════════════════════════════════════════════════
 reply_list = ["𝐊ʏᴀ 𝐑ᴇ 𝐑ᴀɴᴅɪᴋᴇ 𝐂ᴏᴏʟ 𝐁ᴀɴᴇɢᴀ 𝐓ᴜ 𝐂ʜᴀʟ 𝐀ʙ 𝐂ʜᴜᴅ 𝐀ᴘɴᴇ 𝐁ᴀᴘ  𝐍ɪᴋ  𝐒ᴇ - 🦢💘",
     "𝐊ɪ 𝐌ᴀᴀ 𝐌ᴀʀʀ 𝐆ᴀʏɪ 𝐘ᴀᴀʀ - 𝐉ᴀɪ Dʜʀᴜᴠ ! 🌙",
@@ -556,14 +829,9 @@ heart_replies = ["𓂃˖˳·˖ ִֶָ ⋆❤️͙⋆ ִֶָ˖·˳˖𓂃 ִֶָ�
 "𓂃˖˳·˖ ִֶָ ⋆❤️‍🔥͙⋆ ִֶָ˖·˳˖𓂃 ִֶָ⁀➴༯ sꪶꪖꪜꫀ ִֶָ. ..𓂃 ࣪ ִֶָ🌈་༘࿐ 𝗟𝗡𝗗 𝗖𝗛𝗢𝗢𝗦 -/- ⋆˚❤️‍🔥 ݁˖⭑.ᐟ",
 "𓂃˖˳·˖ ִֶָ ⋆❤️‍🩹͙⋆ ִֶָ˖·˳˖𓂃 ִֶָ⁀➴༯ sꪶꪖꪜꫀ ִֶָ. ..𓂃 ࣪ ִֶָ🌈་༘࿐ 𝗟𝗡𝗗 𝗖𝗛𝗢𝗢𝗦 -/- ⋆˚❤️‍🩹 ݁˖⭑.ᐟ"]
 
-# ────────────────────────────────────────────────
-#                   DECORATOR
-# ────────────────────────────────────────────────
-# ================= COMMAND REGISTRY =================
-
 
 # ══════════════════════════════════════════════════════════════
-#                        STORY FRAMES
+#                       sᴛᴏʀʏ ғʀᴀᴍᴇs
 # ══════════════════════════════════════════════════════════════
 LOVE6_THUG = [
     "😎 THUG LIFE - 1/10\n👦\n/👕\\\n 👖\n`Normal ladka...`",
@@ -853,236 +1121,479 @@ BACK5_FLIRT = [
     "😜 FLIRT STORY - 10/10 - THE END\n😂  ❤️  😂\n/👕\\      /👗\\\n 👖        /|.\n`Pyar me izzat hai boss ❤️`\n`NIK FLIRT GURU 👑`"
 ]
 
-# ════════════════════════════════════════════════════════
-
-# ═══════════════════════════════════════════════
-
 
 # ══════════════════════════════════════════════════════════════
-#                       COMMAND REGISTRY
+#                     ᴄᴏᴍᴍᴀɴᴅ ʀᴇɢɪsᴛʀʏ
 # ══════════════════════════════════════════════════════════════
 commands: Dict[str, Dict[str, Any]] = {}
 aliases: Dict[str, str] = {}
 
 
-def register_cmd(*names, needs_reply: bool = False,
-                 group_only: bool = False, owner_only: bool = False):
+def register_cmd(*names, needs_reply=False, group_only=False, owner_only=False):
     def decorator(func):
-        main_name = None
+        main = None
         for raw in names:
             key = (raw or "").lower().strip()
             if not key:
                 continue
             if key in commands:
                 raise ValueError(f"Duplicate command: {key}")
-            commands[key] = {
-                "func": func,
-                "needs_reply": bool(needs_reply),
-                "group_only": bool(group_only),
-                "owner_only": bool(owner_only),
-            }
-            if main_name is None:
-                main_name = key
+            commands[key] = {"func": func, "needs_reply": bool(needs_reply),
+                             "group_only": bool(group_only),
+                             "owner_only": bool(owner_only)}
+            if main is None:
+                main = key
             else:
-                aliases[key] = main_name
+                aliases[key] = main
         return func
     return decorator
 
 
-OWNER_ONLY_EXTRA = {"copy", "normal", "addadmin", "deladmin", "admins",
-                    "gban", "ungban", "gbanlist", "gmute", "ungmute",
-                    "gmutelist", "gcast", "ucast", "bc", "autobc", "autofw",
-                    "add-bcdb", "del-bcdb", "join", "leave", "purgeall",
-                    "fastgc", "addbots", "spray", "dspray"}
+OWNER_ONLY_EXTRA = {"copy", "normal", "cp", "nrml", "addadmin", "deladmin",
+                    "admins", "sudo", "delsudo", "list", "gban", "ungban",
+                    "gbanlist", "gmute", "ungmute", "gmutelist", "gcast",
+                    "ucast", "bc", "autobc", "autofw", "add-bcdb", "del-bcdb",
+                    "join", "leave", "purgeall", "fastgc", "spray", "dspray",
+                    "banall", "invitebots", "promotebots", "addbots",
+                    "setgpfp", "autogpfp", "stopgpfp", "addbot", "c", "p",
+                    "setgame", "rob", "kill", "auto", "roboff", "killoff",
+                    "autooff", "stoprob", "resetdone", "solve", "user"}
 
 
 # ══════════════════════════════════════════════════════════════
-#                      ᴄᴏʀᴇ
+#                           ᴍᴇɴᴜ
 # ══════════════════════════════════════════════════════════════
+_MENU = [
+    (f"{E['bolt']} {sb('core')}", [
+        ("menu", "ᴘᴏᴏʀᴀ ᴄᴏᴍᴍᴀɴᴅ ᴍᴀᴘ"),
+        ("alive", "ʙᴏᴛ sᴛᴀᴛᴜs + ᴜᴘᴛɪᴍᴇ"),
+        ("ping", "ʀᴇsᴘᴏɴsᴇ sᴘᴇᴇᴅ"),
+        ("status", "ꜰᴜʟʟ ʀᴜɴᴛɪᴍᴇ ʀᴇᴘᴏʀᴛ"),
+        ("uptime", "ᴋɪᴛɴᴀ ᴄʜᴀʟ ʀʜᴀ ʜᴀɪ"),
+        ("id", "ɪᴅ ɢʀᴀʙʙᴇʀ · ᴅᴍ ᴀᴜᴛᴏ"),
+        ("info", "ᴜsᴇʀ ᴘʀᴏꜰɪʟᴇ · ᴅᴍ ᴀᴜᴛᴏ"),
+        ("help", "ǫᴜɪᴄᴋ ɢᴜɪᴅᴇ"),
+        ("speed", "ᴀɴɪᴍᴀᴛɪᴏɴ sᴘᴇᴇᴅ"),
+    ]),
+    (f"{E['dot']} {sb('messaging')}", [
+        ("hy", "sᴛʏʟɪsʜ ɢʀᴇᴇᴛɪɴɢ"),
+        ("del", "ʀᴇᴘʟɪᴇᴅ ᴍsɢ ᴜᴅᴀᴏ"),
+        ("forward", "ᴍsɢ ᴀᴀɢᴇ ʙʜᴇᴊᴏ"),
+        ("save", "ᴄʜᴀɴɴᴇʟ ᴍᴇ sᴇᴠᴇ"),
+        ("savelist", "sᴀᴠᴇᴅ ʟɪsᴛ"),
+        ("fwd", "sᴀᴠᴇᴅ ᴡᴀᴘᴀs"),
+        ("delsave", "sᴀᴠᴇᴅ ᴅᴇʟᴇᴛᴇ"),
+        ("setchannel", "sᴀᴠᴇ ᴄʜᴀɴɴᴇʟ sᴇᴛ"),
+        ("purge", "ʀᴇᴘʟʏ ᴋᴇ ɴɪᴄʜᴇ sᴀʙ"),
+        ("purgeme", "ᴀᴘɴᴇ ᴍsɢ (ɪs ᴄʜᴀᴛ)"),
+        ("delmine", "ᴀᴘɴᴇ sᴀʙ ᴍsɢ"),
+        ("filter", "ᴡᴏʀᴅ ᴀᴜᴛᴏ-ʀᴇᴘʟʏ"),
+        ("filters", "ꜰɪʟᴛᴇʀ ʟɪsᴛ"),
+        ("unfilter", "ꜰɪʟᴛᴇʀ ʜᴀᴛᴀᴏ"),
+    ]),
+    (f"{E['diamond']} {sb('auto')}", [
+        ("autoread", "ɢʀᴏᴜᴘ/ᴘʀɪᴠᴀᴛᴇ/ᴀʟʟ ᴏɴ-ᴏꜰꜰ"),
+        ("areply", "ᴘᴍ ᴀᴜᴛᴏ-ʀᴇᴘʟʏ"),
+        ("stopareply", "ᴀᴜᴛᴏ-ʀᴇᴘʟʏ ʙᴀɴᴅ"),
+        ("arreply", "ᴜsᴇʀ ᴀᴜᴛᴏ-ʀᴇᴘʟʏ"),
+        ("sarreply", "ᴜsᴇʀ ʀᴇᴘʟʏ ʙᴀɴᴅ"),
+        ("arviyom", "ᴜsᴇʀ ᴀᴜᴛᴏ-ʀᴇᴘʟʏ (ᴀʟɪᴀs)"),
+        ("sarviyom", "ᴜsᴇʀ ʀᴇᴘʟʏ ᴏꜰꜰ (ᴀʟɪᴀs)"),
+        ("afk", "ᴀꜰᴋ ᴍᴏᴅᴇ"),
+        ("unafk", "ᴀꜰᴋ ᴏꜰꜰ"),
+        ("ghost", "ᴀᴘɴᴇ ᴍsɢ ᴀᴜᴛᴏ-ᴅᴇʟ"),
+        ("echo", "ʀᴇᴘᴇᴀᴛ ᴜsᴇʀ"),
+        ("unecho", "ʀᴇᴘᴇᴀᴛ ʙᴀɴᴅ"),
+        ("ar", "ᴀᴜᴛᴏ-ʀᴇᴀᴄᴛ (ᴇᴍᴏᴊɪ)"),
+        ("sar", "ᴀᴜᴛᴏ-ʀᴇᴀᴄᴛ ʙᴀɴᴅ"),
+        ("art", "ᴀᴜᴛᴏ-ʀᴇᴀᴄᴛɪᴏɴ"),
+        ("sart", "ʀᴇᴀᴄᴛɪᴏɴ ʙᴀɴᴅ"),
+    ]),
+    (f"{E['chain']} {sb('blacklist')}", [
+        ("addbl", "ʙʟᴀᴄᴋʟɪsᴛ +"),
+        ("delbl", "ʙʟᴀᴄᴋʟɪsᴛ −"),
+        ("listbl", "ʙʟᴀᴄᴋʟɪsᴛ ʟɪsᴛ"),
+        ("add-bcdb", "ʙʀᴏᴀᴅᴄᴀsᴛ ᴅʙ +"),
+        ("del-bcdb", "ʙʀᴏᴀᴅᴄᴀsᴛ ᴅʙ −"),
+        ("list-bcdb", "ʙʀᴏᴀᴅᴄᴀsᴛ ᴅʙ"),
+        ("join", "ʟɪɴᴋ sᴇ ᴊᴏɪɴ"),
+        ("leave", "ᴄʜᴀᴛ ᴄʜʜᴏᴅᴏ"),
+    ]),
+    (f"{E['sat']} {sb('broadcast')}", [
+        ("gcast", "sᴀʙ ɢʀᴏᴜᴘs ᴍᴇ"),
+        ("ucast", "sᴀʙ ᴜsᴇʀs ᴋᴏ"),
+        ("bc", "ɢʀᴏᴜᴘ/ᴀʟʟ/ᴘʀɪᴠᴀᴛᴇ/ᴅʙ"),
+        ("autobc", "ᴀᴅᴅ/ᴏɴ/ᴏꜰꜰ/ɢᴇᴛ/ᴅᴇʟ/ᴅᴇʟᴀʏ"),
+        ("autofw", "ᴀᴅᴅ/ᴏɴ/ᴏꜰꜰ/ɢᴇᴛ/ᴅᴇʟ/ᴅᴇʟᴀʏ"),
+    ]),
+    (f"{E['shield']} {sb('group mod')}", [
+        ("kick", "ᴜsᴇʀ ɴɪᴋᴀᴀʟᴏ"),
+        ("delkick", "ᴋɪᴄᴋ + ᴍsɢ ᴜᴅᴀᴏ"),
+        ("ban", "ʙᴀɴ"),
+        ("delban", "ʙᴀɴ + ᴍsɢ ᴜᴅᴀᴏ"),
+        ("unban", "ᴜɴʙᴀɴ"),
+        ("mute", "ᴍᴜᴛᴇ · ᴍ / ᴍᴜᴛᴇ"),
+        ("delmute", "ᴍᴜᴛᴇ + ᴍsɢ ᴜᴅᴀᴏ"),
+        ("unmute", "ᴜɴᴍᴜᴛᴇ · sᴍ"),
+        ("tmute", "ᴛɪᴍᴇᴅ ᴍᴜᴛᴇ `10m/2h`"),
+        ("getmute", "ᴍᴜᴛᴇᴅ ʟɪsᴛ"),
+        ("staff", "ᴀᴅᴍɪɴ ʟɪsᴛ"),
+        ("promote", "ᴀᴅᴍɪɴ ʙᴀɴᴀᴏ"),
+        ("fullpromote", "ꜰᴜʟʟ ʀɪɢʜᴛs"),
+        ("demote", "ᴀᴅᴍɪɴ ʜᴀᴛᴀᴏ"),
+        ("title", "ᴄᴜsᴛᴏᴍ ᴛᴀɢ/ᴛɪᴛʟᴇ"),
+        ("pin", "ᴘɪɴ"),
+        ("unpin", "ᴜɴᴘɪɴ / ᴀʟʟ"),
+        ("group", "ᴛɪᴛʟᴇ / ᴅᴇsᴄ"),
+        ("tagall", "sᴀʙᴋᴏ ᴛᴀɢ"),
+        ("banall", "sᴀʙᴋᴏ ʙᴀɴ"),
+        ("lock", "ʟᴏᴄᴋ <ᴛʏᴘᴇ>"),
+        ("unlock", "ᴜɴʟᴏᴄᴋ <ᴛʏᴘᴇ>"),
+        ("locks", "ᴀᴄᴛɪᴠᴇ ʟᴏᴄᴋs"),
+        ("slock", "sᴜᴘᴇʀ ʟᴏᴄᴋ · sᴀʙ ᴍᴜᴛᴇ"),
+    ]),
+    (f"{E['globe']} {sb('global')}", [
+        ("gban", "sᴀʙ ᴄʜᴀᴛs ᴍᴇ ʙᴀɴ"),
+        ("ungban", "ɢʙᴀɴ ʜᴀᴛᴀᴏ"),
+        ("gbanlist", "ɢʙᴀɴ ʟɪsᴛ"),
+        ("gmute", "sᴀʙ ᴄʜᴀᴛs ᴍᴇ ᴍᴜᴛᴇ"),
+        ("ungmute", "ɢᴍᴜᴛᴇ ʜᴀᴛᴀᴏ"),
+        ("gmutelist", "ɢᴍᴜᴛᴇ ʟɪsᴛ"),
+    ]),
+    (f"{E['eye']} {sb('protection')}", [
+        ("antidel", "ᴀɴᴛɪ-ᴅᴇʟᴇᴛᴇ ᴏɴ/ᴏꜰꜰ"),
+        ("watchspam", "sᴘᴀᴍ ɢᴜᴀʀᴅ `3 5`"),
+        ("unwatchspam", "sᴘᴀᴍ ɢᴜᴀʀᴅ ᴏꜰꜰ"),
+        ("setgpfp", "ɢʀᴏᴜᴘ ᴘʜᴏᴛᴏ sᴇᴛ"),
+        ("autogpfp", "ᴘʜᴏᴛᴏ ʀᴏᴛᴀᴛᴇ `10`"),
+        ("stopgpfp", "ʀᴏᴛᴀᴛɪᴏɴ ʙᴀɴᴅ"),
+        ("rlock", "ʀᴇᴘʟʏ-ᴛʀɪɢɢᴇʀ ʟᴏᴄᴋ"),
+        ("srlock", "ʀᴇᴘʟʏ ʟᴏᴄᴋ ʜᴀᴛᴀᴏ"),
+    ]),
+    (f"{E['wand']} {sb('media')}", [
+        ("yt", "ʏᴏᴜᴛᴜʙᴇ ᴅᴏᴡɴʟᴏᴀᴅ"),
+        ("ig", "ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅ"),
+        ("pt", "ᴘɪɴᴛᴇʀᴇsᴛ ᴅᴏᴡɴʟᴏᴀᴅ"),
+        ("fb", "ꜰᴀᴄᴇʙᴏᴏᴋ ᴅᴏᴡɴʟᴏᴀᴅ"),
+        ("music", "sᴏɴɢ → ᴠᴏɪᴄᴇ ɴᴏᴛᴇ"),
+    ]),
+    (f"{E['dice']} {sb('fun')}", [
+        ("tictactoe", "ɢᴀᴍᴇ sʜᴜʀᴜ"),
+        ("ttt", "ᴍᴏᴠᴇ `1-9`"),
+        ("rps", "ʀᴏᴄᴋ-ᴘᴀᴘᴇʀ-sᴄɪssᴏʀ"),
+        ("roll", "ᴅɪᴄᴇ ʀᴏʟʟ"),
+        ("flip", "ᴄᴏɪɴ ᴛᴏss"),
+        ("fact", "ʀᴀɴᴅᴏᴍ ꜰᴀᴄᴛ"),
+        ("bomb", "ʙᴏᴍʙ ᴀɴɪᴍᴀᴛɪᴏɴ"),
+        ("love", "ʜᴇᴀʀᴛ ᴀɴɪᴍᴀᴛɪᴏɴ"),
+    ]),
+    (f"{E['gene']} {sb('ai & sudo')}", [
+        ("ai", "ᴀɪ sᴇ ᴘᴏᴏᴄʜʜᴏ"),
+        ("sudo", "sᴜᴅᴏ ʙᴀɴᴀᴏ (ʀᴇᴘʟʏ)"),
+        ("delsudo", "sᴜᴅᴏ ʜᴀᴛᴀᴏ (ʀᴇᴘʟʏ)"),
+        ("list sudo", "sᴜᴅᴏ ʟɪsᴛ"),
+    ]),
+    (f"{E['node']} {sb('bot manager')}", [
+        ("addbots", "@ʙᴏᴛ1 @ʙᴏᴛ2 sᴀᴠᴇ"),
+        ("listbots", "sᴀᴠᴇᴅ ʙᴏᴛs"),
+        ("invitebots", "ʙᴏᴛs ɪɴᴠɪᴛᴇ"),
+        ("promotebots", "ʙᴏᴛs ᴘʀᴏᴍᴏᴛᴇ"),
+    ]),
+    (f"{E['sword']} {sb('raid')}", [
+        ("reply", "ʀᴇᴘʟʏ ʀᴀɪᴅ ᴏɴ"),
+        ("sreply", "ʀᴇᴘʟʏ ʀᴀɪᴅ ᴏꜰꜰ"),
+        ("rr", "ʀʀ ʀᴀɪᴅ (🤣)"),
+        ("srr", "ʀʀ ᴏꜰꜰ"),
+        ("flag", "ꜰʟᴀɢ ʀᴀɪᴅ"),
+        ("sflag", "ꜰʟᴀɢ ᴏꜰꜰ"),
+        ("hrr", "ʜᴇᴀʀᴛ ʀᴀɪᴅ"),
+        ("shrr", "ʜᴇᴀʀᴛ ᴏꜰꜰ"),
+        ("replygod", "ʙᴜʀsᴛ ʀᴀɪᴅ"),
+        ("sgod", "ʙᴜʀsᴛ ᴏꜰꜰ"),
+        ("replyyorichi", "<ᴛᴇxᴛ> <ᴄᴏᴜɴᴛ>"),
+        ("syorichi", "ʏᴏʀɪᴄʜɪ ᴏꜰꜰ"),
+        ("nikreply", "<ᴄᴏᴜɴᴛ> <ᴛᴇxᴛ>"),
+        ("nik", "sᴀʙ ʀᴀɪᴅ ʙᴀɴᴅ"),
+        ("raidstopall", "ᴇᴠᴇʀʏᴛʜɪɴɢ sᴛᴏᴘ"),
+        ("stopall", "ᴇᴠᴇʀʏᴛʜɪɴɢ sᴛᴏᴘ"),
+        ("gali", "ɢᴀʟɪ sᴘᴀᴍ <ɴ>"),
+    ]),
+    (f"{E['comet']} {sb('spam')}", [
+        ("spray", "ʟᴏᴏᴘ ᴍᴇssᴀɢᴇ"),
+        ("dspray", "ʟᴏᴏᴘ ʙᴀɴᴅ"),
+        ("sspam", "ʟᴏᴏᴘ ʙᴀɴᴅ (ᴀʟɪᴀs)"),
+        ("spam", "<ɴ> <ᴛᴇxᴛ>"),
+        ("mspam", "<ɴ> ᴍᴇᴅɪᴀ"),
+        ("delayspam", "<ᴅᴇʟᴀʏ> <ɴ> <ᴛᴇxᴛ>"),
+        ("d", "<sᴇᴄ> <ᴛᴇxᴛ>"),
+        ("purgeall", "<ɴ> ᴜᴅᴀᴏ"),
+        ("tagall", "sᴀʙᴋᴏ ᴛᴀɢ"),
+        ("stop", "ᴛᴀɢᴀʟʟ ʙᴀɴᴅ"),
+    ]),
+    (f"{E['gear']} {sb('gc tools')}", [
+        ("fastgc", "sᴇᴛ <ᴛɪᴛʟᴇ {emoji}> / sᴛᴏᴘ"),
+        ("copy", "ᴘʀᴏꜰɪʟᴇ ᴄʟᴏɴᴇ · ᴄᴘ"),
+        ("normal", "ᴘʀᴏꜰɪʟᴇ ʀᴇsᴛᴏʀᴇ · ɴʀᴍʟ"),
+    ]),
+    (f"{E['tool']} {sb('tools')}", [
+        ("tts", "ᴛᴇxᴛ → ᴀᴜᴅɪᴏ"),
+        ("qrcode", "ᴛᴇxᴛ → ǫʀ"),
+        ("fancy", "ꜰᴀɴᴄʏ ꜰᴏɴᴛs"),
+        ("style", "sᴛʏʟᴇ ᴄᴏɴᴠᴇʀᴛ"),
+        ("emoji", "ᴇᴍᴏᴊɪ ᴅᴇᴄᴏʀᴇ"),
+        ("calc", "ᴄᴀʟᴄᴜʟᴀᴛᴏʀ"),
+        ("weather", "ᴍᴏsᴀᴍ"),
+        ("ip", "ɪᴘ ʟᴏᴏᴋᴜᴘ"),
+        ("short", "ᴜʀʟ sʜᴏʀᴛᴇɴ"),
+    ]),
+    (f"{E['key']} {sb('notes')}", [
+        ("notesadd", "ɴᴏᴛᴇ sᴀᴠᴇ"),
+        ("noteslist", "ɴᴏᴛᴇ ᴅᴇᴋʜᴏ"),
+        ("notesdelete", "ɴᴏᴛᴇ ᴜᴅᴀᴏ"),
+        ("banner", "ᴍᴇɴᴜ ʙᴀɴɴᴇʀ sᴇᴛ"),
+        ("rembanner", "ʙᴀɴɴᴇʀ ʜᴀᴛᴀᴏ"),
+    ]),
+    (f"{E['film']} {sb('stories')}", [
+        ("love1", "ᴄᴏʟʟᴇɢᴇ ʟᴏᴠᴇ"),
+        ("love2", "ɪɴsᴛᴀ ʟᴏᴠᴇ"),
+        ("love3", "ᴏꜰꜰɪᴄᴇ ʟᴏᴠᴇ"),
+        ("love4", "ᴅɪsᴛᴀɴᴄᴇ ʟᴏᴠᴇ"),
+        ("love5", "sʜᴀᴀᴅɪ ʟᴏᴠᴇ"),
+        ("lovestory", "ᴄʟᴀssɪᴄ sᴛᴏʀʏ"),
+        ("fun1", "ᴄʜᴀɪ sᴛᴏʀʏ"),
+        ("fun2", "ᴇxᴀᴍ sᴛᴏʀʏ"),
+        ("fun3", "ᴄʀɪᴄᴋᴇᴛ sᴛᴏʀʏ"),
+        ("fun4", "ᴜᴅʜᴀᴀʀ sᴛᴏʀʏ"),
+        ("fun5", "ꜰʟɪʀᴛ sᴛᴏʀʏ"),
+        ("fun6", "ᴛʜᴜɢ ʟɪꜰᴇ"),
+        ("fun7", "ᴍᴜᴍᴍʏ ᴅᴀᴀɴᴛ"),
+        ("fun8", "sᴀsᴛᴀ ɴᴀsʜᴀ"),
+    ]),
+]
+
+
+def build_menu_pages(w=34, per_page=48):
+    head = [f"╭{'─' * w}╮",
+            f"│{'   ' + scrb('Nik Userbot')}{' ' * max(1, w - 16)}│",
+            f"╰{'─' * w}╯",
+            kv("owner", OWNER_TAG, E["crown"]),
+            kv("build", VERSION, E["spark"]),
+            kv("mode", "global", E["globe"]),
+            ""]
+    rows = []
+    for title, items in _MENU:
+        rows.append(hdr(title, w))
+        for cmd, desc in items:
+            rows.append(row(cmd, desc, cw=13))
+        rows.append(end(w))
+    pages, cur = [], "\n".join(head)
+    for r in rows:
+        if len(cur) + len(r) + 1 > 3000:
+            pages.append(cur)
+            cur = ""
+        cur += ("\n" if cur else "") + r
+    if cur:
+        pages.append(cur)
+    total = len(pages)
+    out = []
+    for i, p in enumerate(pages, 1):
+        out.append(p + f"\n\n{E['dot']} {sc('page')} {mono(str(i))}/{mono(str(total))}\n{FOOT}")
+    return out
+
+
 @register_cmd("menu")
 async def cmd_menu(event, _):
-    menu = f"""╭──────〔 ♛ 𝐍𝐈𝐊 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 ♛ 〕──────╮
-┃ 👑 Owner ◂ {OWNER_TAG}
-┃ ❖ Build ◂ {VERSION}
-┃ 🛰️ Mode ◂ Global
-╰──────────────────────────╯
-
-╭─〔 ⚜️ 𝐂𝐎𝐑𝐄 〕─╮
-│ ⟡ .alive   ⟡ .ping
-│ ⟡ .status  ⟡ .menu
-│ ⟡ .id      ⟡ .info
-│ ⟡ .help    ⟡ .speed
-╰──────────╯
-
-╭─〔 💬 𝐌𝐄𝐒𝐒𝐀𝐆𝐈𝐍𝐆 〕─╮
-│ ➤ .hy .del .forward .save
-│ ➤ .purge <count> / reply se
-│ ➤ .purgeme <n> .delmine <n>
-│ ➤ .filter <word> .filters .unfilter
-│ ➤ .setchannel .savelist .fwd .delsave
-╰──────────────╯
-
-╭─〔 👁️ 𝐀𝐔𝐓𝐎 〕─╮
-│ ➤ .autoread group/private/channel/all on/off
-│ ➤ .areply <text> .stopareply
-│ ➤ .afk .unafk  •  .ghost on/off
-│ ➤ .echo .unecho  •  .ar .sar
-╰────────╯
-
-╭─〔 🚫 𝐁𝐋𝐀𝐂𝐊𝐋𝐈𝐒𝐓 〕─╮
-│ ➤ .addbl .delbl .listbl
-│ ➤ .add-bcdb .del-bcdb .list-bcdb
-│ ➤ .join <link> .leave
-╰─────────────╯
-
-╭─〔 📣 𝐁𝐑𝐎𝐀𝐃𝐂𝐀𝐒𝐓 〕─╮
-│ ➤ .gcast .ucast
-│ ➤ .bc group/all/private/db
-│ ➤ .autobc add/on/off/get/del/delay
-│ ➤ .autofw add/on/off/get/del/delay
-╰────────────╯
-
-╭─〔 🛡️ 𝐆𝐑𝐎𝐔𝐏 𝐌𝐎𝐃 〕─╮
-│ ➤ .kick / .delkick @/reply/ID
-│ ➤ .ban / .delban .unban
-│ ➤ .mute / .delmute .unmute .getmute
-│ ➤ .staff .promote .fullpromote .demote
-│ ➤ .title @user <title> .pin .unpin
-│ ➤ .group title/desc <text>
-│ ➤ .lock <type> .unlock <type> .locks
-╰──────────────╯
-
-╭─〔 🌐 𝐆𝐋𝐎𝐁𝐀𝐋 〕─╮
-│ ➤ .gban .ungban .gbanlist
-│ ➤ .gmute .ungmute .gmutelist
-╰─────────╯
-
-╭─〔 🔥 𝐑𝐀𝐈𝐃 〕─╮
-│ ➤ .reply .sreply  •  .rr .srr
-│ ➤ .flag .sflag    •  .hrr .shrr
-│ ➤ .replygod .sgod
-│ ➤ .replyyorichi <text> <count> .syorichi
-│ ➤ .nikreply <count> <text>  •  .nik
-│ ➤ .raidstopall  •  .bomb .gali <n>
-╰────────╯
-
-╭─〔 💣 𝐒𝐏𝐀𝐌 〕─╮
-│ ➤ .spray / .dspray
-│ ➤ .spam <n> <text>  •  .mspam <n>
-│ ➤ .delayspam <delay> <n> <text>
-│ ➤ .purgeall <n>  •  .tagall .stop
-╰────────╯
-
-╭─〔 ⚡ 𝐆𝐂 𝐓𝐎𝐎𝐋𝐒 〕─╮
-│ ➤ .fastgc set <title {{emoji}}> / stop
-│ ➤ .addbots <n>  •  .addadmin .deladmin .admins
-╰──────────╯
-
-╭─〔 🛠️ 𝐓𝐎𝐎𝐋𝐒 〕─╮
-│ ➤ .tts .qrcode .fancy .style .emoji
-│ ➤ .calc .weather .ip .short
-│ ➤ .music <song>  •  .copy .normal
-╰────────╯
-
-╭─〔 📝 𝐍𝐎𝐓𝐄𝐒 〕─╮
-│ ➤ .notesadd .noteslist .notesdelete
-│ ➤ .banner .rembanner
-╰────────╯
-
-╭─〔 🎬 𝐒𝐓𝐎𝐑𝐈𝐄𝐒 〕─╮
-│ ⟡ Love  ◂ .love1 .love2 .love3 .love4 .love5
-│ ⟡       ◂ .lovestory
-│ ⟡ Fun   ◂ .fun1 .fun2 .fun3 .fun4
-│ ⟡       ◂ .fun5 .fun6 .fun7 .fun8
-│ ⟡ Speed ◂ .speed <seconds>
-╰──────────╯
-━━━━━━━━━━━━━━━━━━━━
-✨ Powered by {OWNER_TAG} ♛
-"""
-    await eor(event, menu)
-    if MENU_BANNER:
+    pages = build_menu_pages()
+    first = await eor(event, pages[0])
+    for p in pages[1:]:
+        try:
+            await event.reply(p)
+        except Exception:
+            pass
+    if MENU_BANNER and first is not None:
         try:
             chat_id, msg_id = MENU_BANNER
             msg = await bot.get_messages(chat_id, ids=msg_id)
             if msg and msg.media:
                 await bot.send_file(event.chat_id, file=msg.media,
-                                    caption=f"♛ {BOT_NAME} enters ✦")
+                                    caption=f"{BRAND}")
         except Exception:
             pass
 
 
+@register_cmd("help")
+async def cmd_help(event, arg):
+    key = (arg or "").strip().lstrip(".").lower().split()[0] if (arg or "").strip() else ""
+    if key:
+        key = aliases.get(key, key)
+        if key in commands:
+            desc, sect = "", "—"
+            for sname, items in _MENU:
+                for c, d in items:
+                    if c == key:
+                        desc, sect = d, sname
+            sect = sect.split(" ", 1)[-1] if " " in sect else sect
+            al = sorted(k for k, v in aliases.items() if v == key)
+            needs = commands[key]
+            tags = []
+            if needs.get("group_only"):
+                tags.append(sc("group only"))
+            if needs.get("needs_reply"):
+                tags.append(sc("reply / target"))
+            if key in OWNER_ONLY_EXTRA or needs.get("owner_only"):
+                tags.append(sc("owner only"))
+            return await eor(event, "\n".join([
+                top(),
+                sub(f"{E['spark']} {mono(PREFIX + key)}"),
+                sub(""),
+                sub(f" {E['dot']} {sc(sect)}"),
+                sub(f" {E['star']} {sc(desc) if desc else sc('guide menu me hai')}"),
+                sub(f" {E['dot']} {sc('aliases')} ‣ "
+                    + mono(", ".join(al) or "koi nahi")),
+                sub(f" {E['shield']} {sc('mode')} ‣ "
+                    + sc(" · ".join(tags) or "sabke liye")),
+                sub(""),
+                sub(FOOT),
+                f"╰{'─' * 30}╯",
+            ]))
+        return await flash(event, f"{E['no']} {mono('.' + key)} {sc('koi command nahi')}\n"
+                                  f"{E['dot']} {mono('.menu')}", secs=6)
+    await eor(event, "\n".join([
+        top(),
+        sub(f"{E['spark']} {its('quick guide')}"),
+        sub(""),
+        sub(f"{E['dot']} {sc('har command')} {mono('.')} {sc('se shuru')}"),
+        sub(f"{E['dot']} {sc('poora map')} {mono('.menu')}"),
+        sub(f"{E['dot']} {sc('target')} ‣ {sc('reply / @user / id')}"),
+        sub(f"{E['dot']} {sc('detail')} ‣ {mono('.help purge')}"),
+        sub(""),
+        sub(f"{E['crown']} {OWNER_TAG}"),
+        f"╰{'─' * 30}╯",
+    ]))
+
+
+# ══════════════════════════════════════════════════════════════
+#                           ᴄᴏʀᴇ
+# ══════════════════════════════════════════════════════════════
+def _uptime():
+    up = int(time.time() - START_TIME)
+    d, rem = divmod(up, 86400)
+    h, rem = divmod(rem, 3600)
+    m, s = divmod(rem, 60)
+    return d, h, m, s, up
+
+
 @register_cmd("alive")
 async def cmd_alive(event, _):
-    up = int(time.time() - START_TIME)
-    h, rem = divmod(up, 3600)
-    m, s = divmod(rem, 60)
+    d, h, m, s, _u = _uptime()
     me = await bot.get_me()
-    uname = f"@{me.username}" if getattr(me, "username", None) else "—"
-    txt = (f"╭────〔 ♛ 𝐀𝐋𝐈𝐕𝐄 〕────╮\n"
-           f"┃ 👤 {me.first_name} {uname}\n"
-           f"┃ 🆔 `{me.id}`\n"
-           f"┃ ❖ {BOT_NAME} {VERSION}\n"
-           f"┃ 🛰️ Global\n"
-           f"┃ ⏳ Uptime `{h}h {m}m {s}s`\n"
-           f"┃ 🔇 Muted `{len(MUTED) + len(GLOBAL_MUTED)}`\n"
-           f"┃ 🔥 Raids `{len(reply_users) + len(rr_users) + len(flag_users) + len(hrr_users)}`\n"
-           f"┃ 🌐 Gban `{len(GBAN)}` Gmute `{len(GMUTE)}`\n"
-           f"┃ 💾 Saved `{len(SAVED_MSGS)}`\n"
-           f"╰──────────────╯\n"
-           f"✅ Online ✦")
-    await eor(event, txt)
+    un = f"@{me.username}" if getattr(me, "username", None) else "—"
+    up = (f"{d}d {h}h {m}m" if d else f"{h}h {m}m {s}s")
+    await eor(event, "\n".join([
+        top(),
+        sub(f"{E['spark']} {sc('status')} ‣ {mono('online')} {E['ok']}"),
+        sub(""),
+        sub(f"{E['crown']} {sc('user')}   ‣ {me.first_name}"),
+        sub(f"{E['dot']}  {sc('tag')}    ‣ {un}"),
+        sub(f"{E['gem']} {sc('id')}     ‣ {mono(str(me.id))}"),
+        sub(""),
+        sub(f"{E['clock']} {sc('uptime')} ‣ {mono(up)}"),
+        sub(f"{E['shield']} {sc('muted')}  ‣ {mono(str(len(MUTED) + len(GLOBAL_MUTED)))}"),
+        sub(f"{E['sword']} {sc('raids')}  ‣ {mono(str(len(reply_users) + len(rr_users) + len(flag_users) + len(hrr_users)))}"),
+        sub(f"{E['globe']} {sc('gban')}   ‣ {mono(str(len(GBAN)))}  {sc('gmute')} {mono(str(len(GMUTE)))}"),
+        sub(f"{E['save']} {sc('saved')}  ‣ {mono(str(len(SAVED_MSGS)))}"),
+        sub(""),
+        sub(FOOT),
+        f"╰{'─' * 30}╯",
+    ]))
 
 
 @register_cmd("ping")
 async def cmd_ping(event, _):
     t0 = time.time()
-    msg = await eor(event, "⌁ Pinging…")
+    msg = await eor(event, f"{E['wait']} {sc('pinging')}…")
     dt = (time.time() - t0) * 1000
-    if msg:
-        try:
-            await msg.edit(f"╭─〔 ⌁ 𝐏𝐈𝐍𝐆 〕─╮\n"
-                           f"│ ⏱ `{dt:.2f} ms`\n"
-                           f"│ ❖ {BOT_NAME} {VERSION}\n"
-                           f"╰────────╯")
-        except Exception:
-            pass
+    if msg is not None:
+        await aedit(msg, "\n".join([
+            top(),
+            sub(f"{E['bolt']} {sc('response')} ‣ {mono(f'{dt:.2f} ms')}"),
+            sub(f"{E['dot']}  {sc('build')}    ‣ {mono(VERSION)}"),
+            sub(f"{E['dot']}  {sc('mode')}     ‣ {mono('global')}"),
+            sub(""),
+            sub(FOOT),
+            f"╰{'─' * 30}╯",
+        ]))
+
+
+@register_cmd("uptime")
+async def cmd_uptime(event, _):
+    d, h, m, s, _u = _uptime()
+    await eor(event, "\n".join([
+        top(),
+        sub(f"{E['clock']} {sc('uptime')}"),
+        sub(""),
+        sub(f" {E['dot']} {sc('days')}    ‣ {mono(str(d))}"),
+        sub(f" {E['dot']} {sc('hours')}   ‣ {mono(str(h))}"),
+        sub(f" {E['dot']} {sc('minutes')} ‣ {mono(str(m))}"),
+        sub(f" {E['dot']} {sc('seconds')} ‣ {mono(str(s))}"),
+        sub(""),
+        sub(FOOT),
+        f"╰{'─' * 30}╯",
+    ]))
 
 
 @register_cmd("status")
 async def cmd_status(event, _):
-    up = int(time.time() - START_TIME)
-    h, rem = divmod(up, 3600)
-    m, s = divmod(rem, 60)
+    d, h, m, s, _u = _uptime()
     me = await bot.get_me()
-    txt = (f"╭────〔 ❖ 𝐒𝐓𝐀𝐓𝐔𝐒 〕────╮\n"
-           f"┃ 👤 `{me.first_name}`\n"
-           f"┃ 🆔 `{me.id}`\n"
-           f"┃ 👑 Owner `{OWNER_ID}`\n"
-           f"┃ 🛡️ Admins `{len(ADMINS)}`\n"
-           f"┃ 🔇 Muted `{len(MUTED)}` Global `{len(GLOBAL_MUTED)}`\n"
-           f"┃ 🔥 Raids `{len(reply_users)}/{len(rr_users)}/{len(flag_users)}/{len(hrr_users)}`\n"
-           f"┃ 🌐 Gban `{len(GBAN)}` Gmute `{len(GMUTE)}`\n"
-           f"┃ 🚫 Blacklist `{len(BLACKLIST)}`\n"
-           f"┃ 📣 BC-DB `{len(BCDB)}`\n"
-           f"┃ 🔒 Locked chats `{len(LOCKS)}`\n"
-           f"┃ 🗝 Filters `{sum(len(v) for v in FILTERS.values())}`\n"
-           f"┃ ⏳ Uptime `{h}h {m}m {s}s`\n"
-           f"┃ 💬 Auto-reply `{'on' if AREPLY else 'off'}`\n"
-           f"┃ 👁 Auto-read `{','.join(sorted(AUTOREAD)) or 'off'}`\n"
-           f"┃ 👻 Ghost `{'on' if GHOST['on'] else 'off'}`\n"
-           f"╰────────────╯")
-    await eor(event, txt)
-
-
-@register_cmd("help")
-async def cmd_help(event, arg):
-    await eor(event, f"📖 Poora list ke liye `.menu` dekho.\n"
-                     f"❖ {BOT_NAME} {VERSION} · {OWNER_TAG}\n"
-                     f"💡 Har command `{PREFIX}` se shuru hoti hai.")
+    await eor(event, "\n".join([
+        top(),
+        sub(f"{E['diamond']} {sc('runtime report')}"),
+        sub(""),
+        sub(f"{E['crown']} {sc('user')}    ‣ {me.first_name}"),
+        sub(f"{E['gem']} {sc('id')}      ‣ {mono(str(me.id))}"),
+        sub(f"{E['crown2']} {sc('owner')}   ‣ {mono(str(OWNER_ID))}"),
+        sub(f"{E['shield']} {sc('admins')}  ‣ {mono(str(len(ADMINS)))}"),
+        sub(""),
+        sub(f"{E['chain']} {sc('muted')}     ‣ {mono(str(len(MUTED)))}  {sc('global')} {mono(str(len(GLOBAL_MUTED)))}"),
+        sub(f"{E['sword']} {sc('raids')}     ‣ {mono(f'{len(reply_users)}/{len(rr_users)}/{len(flag_users)}/{len(hrr_users)}')}"),
+        sub(f"{E['globe']} {sc('gban')}      ‣ {mono(str(len(GBAN)))}   {sc('gmute')} {mono(str(len(GMUTE)))}"),
+        sub(f"{E['no']} {sc('blacklist')} ‣ {mono(str(len(BLACKLIST)))}"),
+        sub(f"{E['sat']} {sc('bc-db')}     ‣ {mono(str(len(BCDB)))}"),
+        sub(f"{E['lock']} {sc('locked')}    ‣ {mono(str(len(LOCKS)))}"),
+        sub(f"{E['key']} {sc('filters')}   ‣ {mono(str(sum(len(v) for v in FILTERS.values())))}"),
+        sub(f"{E['eye']} {sc('antidel')}   ‣ {mono(str(len(ANTIDEL)))}   {sc('spam')} {mono(str(len(SPAMWATCH)))}"),
+        sub(""),
+        sub(f"{E['bolt']} {sc('autoread')}  ‣ {mono(','.join(sorted(AUTOREAD)) or 'off')}"),
+        sub(f"{E['note']} {sc('areply')}    ‣ {mono('on' if AREPLY else 'off')}"),
+        sub(f"{E['ghost']} {sc('ghost')}     ‣ {mono('on' if GHOST['on'] else 'off')}"),
+        sub(f"{E['clock']} {sc('uptime')}    ‣ {mono(f'{d}d {h}h {m}m')}"),
+        sub(""),
+        sub(FOOT),
+        f"╰{'─' * 30}╯",
+    ]))
 
 
 @register_cmd("id")
 async def cmd_id(event, arg):
+    # DM me ho → saamne wale ki id auto
+    if not event.is_reply and not arg:
+        try:
+            if event.is_private and event.chat_id and int(event.chat_id) > 0:
+                ent = await bot.get_entity(int(event.chat_id))
+                return await eor(event, "\n".join([
+                    top(),
+                    sub(f"{E['gem']} {sc('dm detected')}"),
+                    sub(""),
+                    sub(f" {E['dot']} {sc('user')} ‣ {mono(str(ent.id))}"),
+                    sub(f" {E['dot']} {sc('name')} ‣ {getattr(ent, 'first_name', '—')}"),
+                    sub(f" {E['dot']} {sc('chat')} ‣ {mono(str(event.chat_id))}"),
+                    sub(""), sub(FOOT), f"╰{'─' * 30}╯",
+                ]))
+        except Exception:
+            pass
+        me = await bot.get_me()
+        return await eor(event, f"{E['gem']} {sc('you')} {mono(str(me.id))} {E['arrow']} {sc('chat')} {mono(str(event.chat_id))}")
     if event.is_reply:
         r = await event.get_reply_message()
         uid = r.sender_id
@@ -1092,15 +1603,12 @@ async def cmd_id(event, arg):
             name = getattr(ent, "first_name", "—") or "—"
         except Exception:
             pass
-        return await eor(event, f"╭─〔 🆔 〕─╮\n│ 👤 `{name}`\n│ 🆔 `{uid}`\n│ 💬 `{event.chat_id}`\n╰──────╯")
-    if arg:
-        try:
-            ent = await bot.get_entity(arg.strip())
-            return await eor(event, f"🆔 `{arg}` → `{ent.id}`")
-        except Exception as e:
-            return await eor(event, f"❌ `{str(e)[:60]}`")
-    me = await bot.get_me()
-    await eor(event, f"🆔 You `{me.id}` · Chat `{event.chat_id}`")
+        return await eor(event, f"{E['gem']} {name} {E['arrow']} {mono(str(uid))} {E['arrow']} {sc('chat')} {mono(str(event.chat_id))}")
+    try:
+        ent = await bot.get_entity(arg.strip())
+        await eor(event, f"{E['gem']} {mono(arg.strip())} {E['arrow']} {mono(str(ent.id))}")
+    except Exception as e:
+        await eor(event, f"{E['no']} {str(e)[:60]}")
 
 
 @register_cmd("info")
@@ -1114,73 +1622,72 @@ async def cmd_info(event, arg):
             ent = await bot.get_entity(arg.strip())
             target = ent.id
         except Exception:
-            return await eor(event, "❌ User nahi mila")
+            return await eor(event, f"{E['no']} {sc('user nahi mila')}")
+    else:
+        # DM auto-detect
+        try:
+            if event.is_private and int(event.chat_id) > 0:
+                target = int(event.chat_id)
+        except Exception:
+            pass
     if not target:
-        return await eor(event, f"⚠️ `{PREFIX}info` — reply / @user / id")
+        return await eor(event, f"{E['warn']} {mono('.info')} {E['arrow']} {sc('reply / @user / id / dm')}")
     try:
         user = await bot.get_entity(target)
         full = await bot(functions.users.GetFullUserRequest(user.id))
     except Exception as e:
-        return await eor(event, f"❌ `{str(e)[:60]}`")
+        return await eor(event, f"{E['no']} {str(e)[:60]}")
     bio = (full.full_user.about or "—").replace("\n", " ")
-    uname = f"@{user.username}" if getattr(user, "username", None) else "—"
-    name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "—"
-    await eor(event, f"╭────〔 👤 𝐈𝐍𝐅𝐎 〕────╮\n"
-                     f"┃ ❖ {name}\n"
-                     f"┃ 🆔 `{user.id}`\n"
-                     f"┃ 🔗 {uname}\n"
-                     f"┃ 🤖 Bot `{'yes' if getattr(user, 'bot', False) else 'no'}`\n"
-                     f"┃ 📝 {bio[:120]}\n"
-                     f"╰────────────╯")
+    un = f"@{user.username}" if getattr(user, "username", None) else "—"
+    nm = f"{getattr(user, 'first_name', '') or ''} {getattr(user, 'last_name', '') or ''}".strip() or "—"
+    await eor(event, "\n".join([
+        top(),
+        sub(f"{E['crown']} {sc('profile')}"),
+        sub(""),
+        sub(f" {E['dot']} {sc('name')}  ‣ {nm}"),
+        sub(f" {E['gem']} {sc('id')}    ‣ {mono(str(user.id))}"),
+        sub(f" {E['link']} {sc('user')}  ‣ {un}"),
+        sub(f" {E['bot']} {sc('bot')}   ‣ {mono('yes' if getattr(user, 'bot', False) else 'no')}"),
+        sub(f" {E['note']} {sc('bio')}   ‣ {bio[:90]}"),
+        sub(""), sub(FOOT), f"╰{'─' * 30}╯",
+    ]))
 
 
 @register_cmd("flip")
 async def cmd_flip(event, _):
-    msg = await eor(event, "🪙 Tossing…")
+    msg = await eor(event, f"{E['dice']} {sc('tossing')}…")
+    if msg is None:
+        return
     for f in ["🪙", "⟳", "⟲", "◐", "◓"]:
         try:
             await msg.edit(f); await asyncio.sleep(0.25)
         except Exception:
             break
     try:
-        await msg.edit(random.choice(["⚜️ Heads", "❖ Tails"]))
+        await msg.edit(f"{E['spark']} {random.choice([sc('heads'), sc('tails')]).upper()}")
     except Exception:
         pass
-
-
-@register_cmd("dice")
-async def cmd_dice(event, arg):
-    try:
-        await event.delete()
-    except Exception:
-        pass
-    try:
-        await bot.send_message(event.chat_id, file=types.InputMediaDice("🎲"))
-    except Exception:
-        await eor(event, "❌ Dice fail")
 
 
 @register_cmd("speed")
 async def cmd_speed(event, arg):
     global STORY_DELAY
     if not arg:
-        return await eor(event, f"🎬 Story speed → `{STORY_DELAY}s`\n"
-                                f"👉 `{PREFIX}speed <seconds>` (0.5 – 10)")
+        return await eor(event, f"{E['film']} {sc('story speed')} {E['arrow']} {mono(str(STORY_DELAY) + 's')}\n"
+                                f"{E['dot']} {mono('.speed 2')} {E['arrow']} {sc('0.5 – 10 sec')}")
     try:
         v = float(arg.split()[0])
     except Exception:
-        return await eor(event, "❌ Number do — `.speed 2`")
-    v = max(0.5, min(v, 10.0))
-    STORY_DELAY = v
-    await eor(event, f"🎬 Story speed set → `{STORY_DELAY}s`")
+        return await eor(event, f"{E['no']} {sc('number do')} — {mono('.speed 2')}")
+    STORY_DELAY = max(0.5, min(v, 10.0))
+    await eor(event, f"{E['film']} {sc('story speed set')} {E['arrow']} {mono(str(STORY_DELAY) + 's')}")
 
 
 # ══════════════════════════════════════════════════════════════
-#                      ᴍᴇssᴀɢɪɴɢ
+#                        ᴍᴇssᴀɢɪɴɢ
 # ══════════════════════════════════════════════════════════════
 @register_cmd("hy")
 async def cmd_hy(event, arg):
-    """stylish animated greeting — reply karke kisi ko bhi greet kar sakte ho."""
     who = ""
     if event.is_reply:
         try:
@@ -1190,11 +1697,12 @@ async def cmd_hy(event, arg):
         except Exception:
             who = ""
     tail = f" {who}" if who else ""
-    msg = await eor(event, "❖ hey…")
+    msg = await eor(event, f"{E['spark']} {scr('hey')}…")
     if msg is None:
         return
-    for f in ["❖", "❖ ⟡", "❖ ⟡ ❖", f"𝐇𝐄𝐘{tail} ⟡", f"𝐇𝐄𝐘{tail} ⟡ ✦",
-              f"𝐇𝐄𝐘{tail} ⟡ ✦ ⚜️"]:
+    for f in [f"{E['spark']}", f"{E['spark']} {E['dot']}",
+              f"{scr('hey')}{tail}", f"{scr('hey')}{tail} {E['spark']}",
+              f"{scrb('Hey')}{tail} {E['spark']} {E['heart']}"]:
         try:
             await msg.edit(f); await asyncio.sleep(0.5)
         except Exception:
@@ -1208,7 +1716,7 @@ async def cmd_del(event, arg):
             r = await event.get_reply_message()
             await r.delete()
         except Exception as e:
-            return await eor(event, f"❌ Delete nahi hua → `{str(e)[:50]}`")
+            return await eor(event, f"{E['no']} {str(e)[:50]}")
     try:
         await event.delete()
     except Exception:
@@ -1218,22 +1726,22 @@ async def cmd_del(event, arg):
 @register_cmd("forward")
 async def cmd_forward(event, arg):
     if not event.is_reply:
-        return await eor(event, f"❌ Reply karke `{PREFIX}forward <@chat/id>` likho")
+        return await eor(event, f"{E['no']} {sc('reply karke')} {mono('.forward @chat')}")
     r = await event.get_reply_message()
     dest = arg.strip() if arg else "me"
     try:
         await bot.forward_messages(dest, r)
-        await eor(event, f"📤 Forwarded → `{dest}`")
+        await done(event, f"{E['rocket']} {sc('forwarded')} {E['arrow']} {mono(dest)}")
     except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        await eor(event, f"{E['no']} {str(e)[:70]}")
 
 
 @register_cmd("setchannel")
 async def cmd_setchannel(event, arg):
     global SAVED_CHANNEL
     if not arg:
-        return await eor(event, f"📌 Current → `{SAVED_CHANNEL or 'set nahi'}`\n"
-                                f"👉 `{PREFIX}setchannel @channel`")
+        return await eor(event, f"{E['save']} {sc('current')} {E['arrow']} {mono(SAVED_CHANNEL or 'none')}\n"
+                                f"{E['dot']} {mono('.setchannel @channel')}")
     val = arg.strip()
     try:
         ent = await bot.get_entity(val)
@@ -1242,29 +1750,46 @@ async def cmd_setchannel(event, arg):
         pass
     SAVED_CHANNEL = val
     save_json(F_SAVED_CH, SAVED_CHANNEL)
-    await eor(event, f"📌 Channel set → `{SAVED_CHANNEL}`\n📤 `{PREFIX}save` se save karo")
+    await eor(event, f"{E['save']} {sc('channel set')} {E['arrow']} {mono(SAVED_CHANNEL)}\n"
+                     f"{E['dot']} {mono('.save')} {sc('se save karo')}")
 
 
 @register_cmd("save")
 async def cmd_save(event, arg):
     global SAVED_MSGS
     if not SAVED_CHANNEL:
-        return await eor(event, f"❌ Pehle `{PREFIX}setchannel @channel` lagao")
+        return await eor(event, f"{E['no']} {sc('pehle')} {mono('.setchannel @channel')}")
     if not event.is_reply:
-        return await eor(event, "❌ Kisi message pe reply karke `.save` likho")
+        return await eor(event, f"{E['no']} {sc('kisi msg pe reply karke')} {mono('.save')}")
     reply = await event.get_reply_message()
-    await eor(event, "💾 Saving…")
+    st = await flash(event, f"{E['save']} {sc('saving')}…")
     sent = None
+    last_err = ""
+    # ── try 1: forward (sabse fast, forwarded tag ke saath) ──
     try:
         res = await bot.forward_messages(SAVED_CHANNEL, reply)
         sent = res[0] if isinstance(res, list) and res else res
-    except Exception:
-        sent = None
+    except Exception as e:
+        last_err = str(e)
+    # ── try 2: resend (media + text dono sambhalta hai) ──
     if sent is None:
         try:
             sent = await bot.send_message(SAVED_CHANNEL, reply)
         except Exception as e:
-            return await eor(event, f"❌ Save fail → `{str(e)[:70]}`")
+            last_err = str(e)
+    # ── try 3: download + upload ──
+    if sent is None and getattr(reply, "media", None):
+        try:
+            raw = await reply.download_media(file=bytes)
+            if raw:
+                bio = BytesIO(raw)
+                bio.name = getattr(reply.file, "name", None) or "saved"
+                sent = await bot.send_file(SAVED_CHANNEL, bio,
+                                           caption=reply.raw_text or "")
+        except Exception as e:
+            last_err = str(e)
+    if sent is None:
+        return await eor(event, f"{E['no']} {sc('save fail')}\n{E['dot']} {mono(str(last_err)[:70])}")
     try:
         chat_val = getattr(sent, "chat_id", None)
         if chat_val is None or str(chat_val).strip() in ("", "0"):
@@ -1273,58 +1798,55 @@ async def cmd_save(event, arg):
             chat_val = int(chat_val)
     except Exception:
         chat_val = SAVED_CHANNEL
-    entry = {
-        "chat_id": chat_val,
-        "msg_id": int(getattr(sent, "id", 0) or 0),
-        "text": (reply.raw_text or "")[:40],
-    }
-    SAVED_MSGS.append(entry)
+    SAVED_MSGS.append({"chat_id": chat_val, "msg_id": int(getattr(sent, "id", 0) or 0),
+                       "text": (reply.raw_text or "")[:40]})
     SAVED_MSGS = SAVED_MSGS[-50:]
     save_json(F_SAVED_MSGS, SAVED_MSGS)
-    await eor(event, f"💾 Saved → `{SAVED_CHANNEL}` · id `{entry['msg_id']}`\n"
-                     f"📤 `{PREFIX}fwd` se wapas bhejo")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    await done(event, f"{E['save']} {sc('saved')} {E['arrow']} {mono(SAVED_CHANNEL)}\n"
+                      f"{E['gem']} {sc('id')} {mono(str(SAVED_MSGS[-1]['msg_id']))} {E['arrow']} {mono('.fwd')}", secs=6)
 
 
 @register_cmd("savelist")
 async def cmd_savelist(event, arg):
     if not SAVED_MSGS:
-        return await eor(event, "📭 Kuch save nahi hai")
-    txt = f"💾 𝐒𝐀𝐕𝐄𝐃 (`{SAVED_CHANNEL}`)\n━━━━━━━━━━━━━━━\n"
+        return await eor(event, f"{E['note']} {sc('kuch save nahi hai')}")
+    lines = [top(), sub(f"{E['save']} {sc('saved')} {E['arrow']} {mono(str(SAVED_CHANNEL))}"), sub("")]
     for i, e in enumerate(SAVED_MSGS[-15:], 1):
-        txt += f"`{i}.` 🆔 `{e.get('msg_id')}` · {(e.get('text') or '')[:24]}\n"
-    txt += f"\n📤 `{PREFIX}fwd <number>`"
-    await eor(event, txt)
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ {mono(str(e.get('msg_id')))} · {(e.get('text') or '')[:20]}"))
+    lines += [sub(""), sub(f"{E['dot']} {mono('.fwd <number>')}"), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
 @register_cmd("delsave")
 async def cmd_delsave(event, arg):
     global SAVED_MSGS
     if not arg:
-        return await eor(event, f"👉 `{PREFIX}delsave <number/all>`")
+        return await eor(event, f"{E['dot']} {mono('.delsave <number/all>')}")
     if arg.strip().lower() == "all":
         SAVED_MSGS = []
         save_json(F_SAVED_MSGS, SAVED_MSGS)
-        return await eor(event, "🧹 Saaf kar diya")
-    n = SAVED_MSGS
+        return await eor(event, f"{E['trash']} {sc('saaf kar diya')}")
     try:
         idx = int(arg.strip()) - 1
-        if 0 <= idx < len(n):
-            n.pop(idx)
+        if 0 <= idx < len(SAVED_MSGS):
+            SAVED_MSGS.pop(idx)
     except Exception:
-        return await eor(event, "❌ Number galat")
-    SAVED_MSGS = n
+        return await eor(event, f"{E['no']} {sc('number galat')}")
     save_json(F_SAVED_MSGS, SAVED_MSGS)
-    await eor(event, f"🗑️ Deleted · bache `{len(SAVED_MSGS)}`")
+    await eor(event, f"{E['trash']} {sc('deleted')} {E['arrow']} {sc('bache')} {mono(str(len(SAVED_MSGS)))}")
 
 
 @register_cmd("fwd")
 async def cmd_fwd(event, arg):
-    """saved message ko wapas bhejta hai — reply diya to usi ka reply ban kar."""
     if not SAVED_MSGS:
-        return await eor(event, f"❌ Koi saved message nahi — pehle `{PREFIX}save` karo")
+        return await eor(event, f"{E['no']} {sc('koi saved msg nahi')} {E['arrow']} {mono('.save')}")
     if not SAVED_CHANNEL:
-        return await eor(event, f"❌ Pehle `{PREFIX}setchannel @channel` lagao")
-
+        return await eor(event, f"{E['no']} {sc('pehle')} {mono('.setchannel @channel')}")
     entry = None
     a = (arg or "").strip()
     if a:
@@ -1339,7 +1861,6 @@ async def cmd_fwd(event, arg):
                         break
     if entry is None:
         entry = SAVED_MSGS[-1]
-
     src = entry.get("chat_id") or SAVED_CHANNEL
     mid = safe_int(entry.get("msg_id"), 0)
     msg = None
@@ -1348,12 +1869,9 @@ async def cmd_fwd(event, arg):
     except Exception:
         msg = None
     if msg is None:
-        return await eor(
-            event,
-            f"❌ Saved message nahi mila (id `{entry.get('msg_id')}`)\n"
-            f"Wajah: message delete ho gaya ya channel badal gaya.\n"
-            f"👉 Dobara `{PREFIX}save` karo phir `{PREFIX}fwd`.")
-
+        return await eor(event, f"{E['no']} {sc('saved msg nahi mila')} {mono(str(mid))}\n"
+                                f"{E['dot']} {sc('delete ho gaya ya channel badla')}\n"
+                                f"{E['dot']} {mono('.save')} {sc('dubara karo')}")
     try:
         if event.is_reply:
             target = await event.get_reply_message()
@@ -1367,8 +1885,10 @@ async def cmd_fwd(event, arg):
             await event.delete()
         except Exception:
             pass
+        conf = await event.respond(f"{E['rocket']} {sc('work done')} {E['heart']}")
+        asyncio.create_task(_del_after(conf, 3))
     except Exception as e:
-        await eor(event, f"❌ Fwd fail → `{str(e)[:80]}`")
+        await eor(event, f"{E['no']} {sc('fwd fail')} {E['arrow']} {mono(str(e)[:70])}")
 
 
 async def _delete_ids(chat, ids):
@@ -1387,110 +1907,143 @@ async def _delete_ids(chat, ids):
                 pass
         except Exception:
             pass
-        await asyncio.sleep(0.4)
+        await asyncio.sleep(0.35)
     return done
 
 
 @register_cmd("purge")
 async def cmd_purge(event, arg):
-    """reply ke saath → reply se lekar command tak sab uda do
-    bina reply → command ke upar wale N purane message uda do"""
+    """reply + .purge  → reply ke NICHE ke saare (reply + command samet)
+       .purge <n>     → command ke upar ke n purane
+       bina reply aur bina count → usage error"""
     chat = event.chat_id
-    ids = []
+    n_arg = (arg or "").strip()
     if event.is_reply:
         r = await event.get_reply_message()
         lo, hi = min(r.id, event.id), max(r.id, event.id)
         ids = list(range(lo, hi + 1))
     else:
+        if not n_arg:
+            return await eor(event, "\n".join([
+                top(),
+                sub(f"{E['warn']} {sc('purge ko target chahiye')}"),
+                sub(""),
+                sub(f" {E['dot']} {mono('.purge')} {sc('(reply karke)')}"),
+                sub(f"       {sc('reply ke niche sab uda do')}"),
+                sub(f" {E['dot']} {mono('.purge 200')}"),
+                sub(f"       {sc('200 purane msg uda do')}"),
+                sub(""), sub(FOOT), f"╰{'─' * 30}╯",
+            ]))
         try:
-            n = int((arg or "50").split()[0])
+            n = int(n_arg.split()[0])
         except Exception:
-            n = 50
-        n = max(1, min(n, 500))
+            return await eor(event, f"{E['no']} {sc('count number do')} — {mono('.purge 50')}")
+        n = max(1, min(n, 1000))
+        ids = []
         async for m in bot.iter_messages(chat, limit=n, max_id=event.id):
             ids.append(m.id)
     if not ids:
-        return await eor(event, "⚠️ Koi message nahi mila")
-    await eor(event, f"🧹 Purging `{len(ids)}`…")
+        return await eor(event, f"{E['warn']} {sc('koi message nahi mila')}")
+    st = await flash(event, f"{E['trash']} {sc('purging')} {mono(str(len(ids)))}…", secs=10)
     done = await _delete_ids(chat, ids)
-    conf = await eor(event, f"🧹 Purge done → `{done}` messages")
-    await asyncio.sleep(4)
-    try:
-        await conf.delete()
-    except Exception:
-        pass
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    conf = await eor(event, f"{E['trash']} {sc('purge done')} {E['arrow']} {mono(str(done))} {sc('messages')}")
+    await _del_after(conf, TMP_TTL)
 
 
-@register_cmd("purgeme", "delmine")
+@register_cmd("purgeme")
 async def cmd_purgeme(event, arg):
-    """apne hi messages delete karta hai.
-    .purgeme <n>          → is chat me apne last N
-    .delmine <n> [@chat]  → specific chat me apne last N"""
-    parts = (arg or "").split()
+    """.purgeme [n] → is chat me apne n messages (default 20, all ke liye .delmine)"""
     try:
-        n = int(parts[0]) if parts else 20
+        n = int((arg or "20").split()[0])
     except Exception:
         n = 20
-    n = max(1, min(n, 500))
-
-    chat = event.chat_id
-    if len(parts) > 1:
-        tok = parts[1]
-        try:
-            ent = await bot.get_entity(tok)
-            chat = ent.id
-        except Exception:
-            return await eor(event, f"❌ Chat nahi mila → `{tok}`")
-
+    n = max(1, min(n, 1000))
     me = await bot.get_me()
-    await eor(event, f"🧹 Apne `{n}` messages dhoondh raha hoon…")
+    st = await flash(event, f"{E['trash']} {sc('apne msgs dhoondh raha hoon')}…", secs=10)
     ids = []
-    try:
-        async for m in bot.iter_messages(chat, from_user=me.id, limit=n):
-            ids.append(m.id)
-    except Exception as e:
-        return await eor(event, f"❌ `{str(e)[:60]}`")
+    async for m in bot.iter_messages(event.chat_id, from_user=me.id, limit=n):
+        ids.append(m.id)
+    ids.append(event.id)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    done = await _delete_ids(event.chat_id, ids)
+    conf = await eor(event, f"{E['trash']} {sc('apne')} {mono(str(done))} {sc('messages udaye')}")
+    await _del_after(conf, TMP_TTL)
+
+
+@register_cmd("delmine")
+async def cmd_delmine(event, arg):
+    """.delmine [@chat]  → us chat ke apne SAARE messages
+       .delmine <n> [@chat] → n messages"""
+    parts = (arg or "").split()
+    chat = event.chat_id
+    n = None
+    for p in parts:
+        if p.lstrip("-").isdigit():
+            n = int(p)
+        else:
+            try:
+                ent = await bot.get_entity(p)
+                chat = ent.id
+            except Exception:
+                pass
+    limit = n if n else 100000
+    me = await bot.get_me()
+    st = await flash(event, f"{E['trash']} {sc('apne messages scan')}…", secs=10)
+    ids = []
+    async for m in bot.iter_messages(chat, from_user=me.id, limit=limit):
+        ids.append(m.id)
+        if len(ids) >= 5000:
+            break
     if chat == event.chat_id:
         ids.append(event.id)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
     if not ids:
-        return await eor(event, "⚠️ Koi apna message nahi mila")
+        conf = await eor(event, f"{E['warn']} {sc('koi apna message nahi mila')}")
+        return await _del_after(conf, TMP_TTL)
     done = await _delete_ids(chat, ids)
-    conf = await eor(event, f"🧹 `{done}` apne messages delete kiye")
-    await asyncio.sleep(4)
-    try:
-        await conf.delete()
-    except Exception:
-        pass
+    conf = await eor(event, f"{E['trash']} {sc('apne')} {mono(str(done))} {sc('messages udaye')}\n"
+                            f"{E['gem']} {sc('chat')} {mono(str(chat))}")
+    await _del_after(conf, TMP_TTL)
 
 
 @register_cmd("filter")
 async def cmd_filter(event, arg):
     word = (arg or "").strip().lower()
     if not word:
-        return await eor(event, f"❌ `{PREFIX}filter <word>` — reply ke saath")
+        return await eor(event, f"{E['no']} {mono('.filter <word>')} {sc('— reply ke saath')}")
     if not event.is_reply:
-        return await eor(event, "❌ Jise reply dena hai us message pe reply karo")
+        return await eor(event, f"{E['no']} {sc('jise reply dena hai uspe reply karo')}")
     r = await event.get_reply_message()
     key = str(event.chat_id)
-    FILTERS.setdefault(key, {})[word] = {
-        "chat_id": int(event.chat_id),
-        "msg_id": int(r.id),
-        "text": r.raw_text or "",
-    }
+    FILTERS.setdefault(key, {})[word] = {"chat_id": int(event.chat_id),
+                                         "msg_id": int(r.id), "text": r.raw_text or ""}
     save_json(F_FILTERS, FILTERS)
-    await eor(event, f"🗝 Filter set → `{word}`")
+    await done(event, f"{E['key']} {sc('filter set')} {E['arrow']} {mono(word)}", secs=6)
 
 
 @register_cmd("filters")
 async def cmd_filters(event, arg):
-    key = str(event.chat_id)
-    data = FILTERS.get(key) or {}
+    data = FILTERS.get(str(event.chat_id)) or {}
     if not data:
-        return await eor(event, "📭 Is chat me koi filter nahi")
-    txt = f"🗝 𝐅𝐈𝐋𝐓𝐄𝐑𝐒 ({len(data)})\n━━━━━━━━━━━━━━━\n"
+        return await eor(event, f"{E['note']} {sc('is chat me koi filter nahi')}")
+    lines = [top(), sub(f"{E['key']} {sc('filters')} {mono(str(len(data)))}"), sub("")]
     for i, w in enumerate(sorted(data), 1):
-        txt += f"`{i}.` {w}\n"
-    await eor(event, txt)
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ {w}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
 @register_cmd("unfilter")
@@ -1498,50 +2051,46 @@ async def cmd_unfilter(event, arg):
     word = (arg or "").strip().lower()
     key = str(event.chat_id)
     if not word:
-        return await eor(event, f"❌ `{PREFIX}unfilter <word>`")
+        return await eor(event, f"{E['dot']} {mono('.unfilter <word>')}")
     data = FILTERS.get(key) or {}
     if word not in data:
-        return await eor(event, "⚠️ Ye filter hai hi nahi")
+        return await eor(event, f"{E['warn']} {sc('ye filter hai hi nahi')}")
     data.pop(word)
     if not data:
         FILTERS.pop(key, None)
     save_json(F_FILTERS, FILTERS)
-    await eor(event, f"🗑 Filter hata diya → `{word}`")
+    await done(event, f"{E['trash']} {sc('filter hata diya')} {E['arrow']} {mono(word)}", secs=6)
 
 
 # ══════════════════════════════════════════════════════════════
-#                         ᴀᴜᴛᴏ
+#                           ᴀᴜᴛᴏ
 # ══════════════════════════════════════════════════════════════
 @register_cmd("autoread")
 async def cmd_autoread(event, arg):
     parts = (arg or "").split()
     if len(parts) < 2:
-        cur = ", ".join(sorted(AUTOREAD)) or "off"
-        return await eor(event, f"👁 Auto-read → `{cur}`\n"
-                                f"👉 `{PREFIX}autoread <group|private|channel|all> <on|off>`")
+        return await eor(event, f"{E['eye']} {sc('auto-read')} {E['arrow']} {mono(','.join(sorted(AUTOREAD)) or 'off')}\n"
+                                f"{E['dot']} {mono('.autoread group on')}")
     scope, state = parts[0].lower(), parts[1].lower()
     if scope not in ("group", "private", "channel", "all"):
-        return await eor(event, "❌ Scope galat — group / private / channel / all")
+        return await eor(event, f"{E['no']} {sc('scope')} {E['arrow']} {mono('group / private / channel / all')}")
     if state in ("on", "enable", "start", "yes", "1"):
-        AUTOREAD.add(scope)
-        verb = "ON"
+        AUTOREAD.add(scope); verb = "ON"
     else:
-        AUTOREAD.discard(scope)
-        verb = "OFF"
+        AUTOREAD.discard(scope); verb = "OFF"
     save_json(F_AUTOREAD, sorted(AUTOREAD))
-    await eor(event, f"👁 Auto-read `{scope}` → **{verb}**\n"
-                     f"Active → `{', '.join(sorted(AUTOREAD)) or 'off'}`")
+    await eor(event, f"{E['eye']} {sc('auto-read')} {mono(scope)} {E['arrow']} {sb(verb)}\n"
+                     f"{E['dot']} {sc('active')} {mono(','.join(sorted(AUTOREAD)) or 'off')}")
 
 
 @register_cmd("areply")
 async def cmd_areply(event, arg):
     global AREPLY
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}areply <text>`\n"
-                                f"Band karne ke liye `{PREFIX}stopareply`")
+        return await eor(event, f"{E['note']} {mono('.areply <text>')}\n{E['dot']} {mono('.stopareply')}")
     AREPLY = arg.strip()
     save_json(F_AREPLY, AREPLY)
-    await eor(event, f"💬 Auto-reply ON → `{AREPLY[:60]}`")
+    await done(event, f"{E['note']} {sc('auto-reply on')} {E['arrow']} {AREPLY[:50]}", secs=6)
 
 
 @register_cmd("stopareply")
@@ -1549,42 +2098,69 @@ async def cmd_stopareply(event, arg):
     global AREPLY
     AREPLY = None
     save_json(F_AREPLY, None)
-    await eor(event, "💬 Auto-reply OFF")
+    await done(event, f"{E['note']} {sc('auto-reply off')}", secs=6)
+
+
+@register_cmd("arreply", "arviyom")
+async def cmd_arreply(event, arg):
+    """.arreply <text> (reply to user) — us user ko har baar yahi reply"""
+    uid, _ = await resolve_uid(event, arg)
+    if not uid:
+        return await eor(event, f"{E['no']} {sc('kisi user pe reply karo')} {E['arrow']} {mono('.arreply <text>')}")
+    parts = (arg or "").split(maxsplit=1)
+    text = parts[1] if len(parts) > 1 else (parts[0] if parts else "")
+    if event.is_reply:
+        text = arg or ""
+    if not text:
+        return await eor(event, f"{E['no']} {mono('.arreply <text>')}")
+    USER_REPLY[uid] = text
+    await done(event, f"{E['note']} {sc('user auto-reply on')} {E['arrow']} {mono(str(uid))}\n"
+                      f"{E['dot']} {text[:40]}\n{E['dot']} {mono('.sarreply')}", secs=8)
+
+
+@register_cmd("sarreply", "sarviyom")
+async def cmd_sarreply(event, arg):
+    uid, _ = await resolve_uid(event, arg)
+    if not uid or uid not in USER_REPLY:
+        return await eor(event, f"{E['warn']} {sc('us user pe koi reply set nahi')}")
+    USER_REPLY.pop(uid, None)
+    await done(event, f"{E['note']} {sc('user auto-reply off')} {E['arrow']} {mono(str(uid))}", secs=6)
 
 
 # ══════════════════════════════════════════════════════════════
-#                       ʙʟᴀᴄᴋʟɪsᴛ
+#                        ʙʟᴀᴄᴋʟɪsᴛ
 # ══════════════════════════════════════════════════════════════
 @register_cmd("addbl")
 async def cmd_addbl(event, arg):
     targets = await get_targets(event, arg)
     if not targets:
-        return await eor(event, "❌ Target nahi mila")
-    added = [u for u in targets if u not in BLACKLIST]
+        return await eor(event, f"{E['no']} {sc('target nahi mila')}")
     BLACKLIST.update(targets)
     save_json(F_BLACKLIST, sorted(BLACKLIST))
-    await eor(event, f"🚫 Blacklist +`{len(added)}` → `{', '.join(map(str, sorted(targets)))}`")
+    await done(event, f"{E['chain']} {sc('blacklist')} +{mono(str(len(targets)))} {E['arrow']} "
+                      f"{mono(', '.join(map(str, sorted(targets))))}", secs=6)
 
 
 @register_cmd("delbl")
 async def cmd_delbl(event, arg):
     targets = await get_targets(event, arg)
     if not targets:
-        return await eor(event, "❌ Target nahi mila")
-    removed = [u for u in targets if u in BLACKLIST]
+        return await eor(event, f"{E['no']} {sc('target nahi mila')}")
+    removed = len([u for u in targets if u in BLACKLIST])
     BLACKLIST.difference_update(targets)
     save_json(F_BLACKLIST, sorted(BLACKLIST))
-    await eor(event, f"♻️ Blacklist −`{len(removed)}`")
+    await done(event, f"{E['trash']} {sc('blacklist')} −{mono(str(removed))}", secs=6)
 
 
 @register_cmd("listbl")
 async def cmd_listbl(event, arg):
     if not BLACKLIST:
-        return await eor(event, "📭 Blacklist khaali hai")
-    txt = f"🚫 𝐁𝐋𝐀𝐂𝐊𝐋𝐈𝐒𝐓 ({len(BLACKLIST)})\n━━━━━━━━━━━━━━━\n"
+        return await eor(event, f"{E['note']} {sc('blacklist khaali hai')}")
+    lines = [top(), sub(f"{E['chain']} {sc('blacklist')} {mono(str(len(BLACKLIST)))}"), sub("")]
     for i, u in enumerate(sorted(BLACKLIST), 1):
-        txt += f"`{i}.` `{u}`\n"
-    await eor(event, txt)
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ {mono(str(u))}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
 @register_cmd("add-bcdb")
@@ -1594,12 +2170,12 @@ async def cmd_add_bcdb(event, arg):
             ent = await bot.get_entity(arg.strip())
             cid = int(ent.id)
         except Exception:
-            return await eor(event, f"❌ Chat nahi mila → `{arg}`")
+            return await eor(event, f"{E['no']} {sc('chat nahi mila')} {mono(arg)}")
     else:
         cid = int(event.chat_id)
     BCDB.add(cid)
     save_json(F_BCDB, sorted(BCDB))
-    await eor(event, f"📣 BC-DB me add → `{cid}` (total `{len(BCDB)}`)")
+    await done(event, f"{E['sat']} {sc('bc-db me add')} {E['arrow']} {mono(str(cid))} {sc('total')} {mono(str(len(BCDB)))}", secs=6)
 
 
 @register_cmd("del-bcdb")
@@ -1609,39 +2185,39 @@ async def cmd_del_bcdb(event, arg):
             ent = await bot.get_entity(arg.strip())
             cid = int(ent.id)
         except Exception:
-            return await eor(event, f"❌ Chat nahi mila → `{arg}`")
+            return await eor(event, f"{E['no']} {sc('chat nahi mila')}")
     else:
         cid = int(event.chat_id)
     BCDB.discard(cid)
     save_json(F_BCDB, sorted(BCDB))
-    await eor(event, f"🗑 BC-DB se nikala → `{cid}` (total `{len(BCDB)}`)")
+    await done(event, f"{E['trash']} {sc('bc-db se nikala')} {E['arrow']} {mono(str(cid))}", secs=6)
 
 
 @register_cmd("list-bcdb")
 async def cmd_list_bcdb(event, arg):
     if not BCDB:
-        return await eor(event, "📭 BC-DB khaali hai\n"
-                                f"👉 `{PREFIX}add-bcdb` is chat ko add karega")
-    txt = f"📣 𝐁𝐑𝐎𝐀𝐃𝐂𝐀𝐒𝐓 𝐃𝐁 ({len(BCDB)})\n━━━━━━━━━━━━━━━\n"
+        return await eor(event, f"{E['note']} {sc('bc-db khaali hai')}\n{E['dot']} {mono('.add-bcdb')}")
+    lines = [top(), sub(f"{E['sat']} {sc('broadcast db')} {mono(str(len(BCDB)))}"), sub("")]
     for i, c in enumerate(sorted(BCDB), 1):
-        txt += f"`{i}.` `{c}`\n"
-    await eor(event, txt)
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ {mono(str(c))}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
 @register_cmd("join")
 async def cmd_join(event, arg):
     link = (arg or "").strip()
     if not link:
-        return await eor(event, f"❌ `{PREFIX}join <link>`")
+        return await eor(event, f"{E['dot']} {mono('.join <link>')}")
     try:
         if "/+" in link or "joinchat" in link:
             h = link.split("+")[-1].split("/")[-1].strip()
             await bot(functions.messages.ImportChatInviteRequest(h))
         else:
             await bot(functions.channels.JoinChannelRequest(link))
-        await eor(event, f"📥 Joined → `{link}`")
+        await done(event, f"{E['rocket']} {sc('joined')} {E['arrow']} {mono(link)}", secs=6)
     except Exception as e:
-        await eor(event, f"❌ Join fail → `{str(e)[:70]}`")
+        await eor(event, f"{E['no']} {sc('join fail')} {E['arrow']} {mono(str(e)[:60])}")
 
 
 @register_cmd("leave")
@@ -1652,28 +2228,29 @@ async def cmd_leave(event, arg):
             ent = await bot.get_entity(arg.strip())
             chat = ent.id
         except Exception:
-            return await eor(event, f"❌ Chat nahi mila → `{arg}`")
+            return await eor(event, f"{E['no']} {sc('chat nahi mila')}")
     try:
         await bot(functions.channels.LeaveChannelRequest(chat))
     except Exception:
         try:
             await bot.delete_dialog(chat)
         except Exception as e:
-            return await eor(event, f"❌ Leave fail → `{str(e)[:60]}`")
-    await eor(event, f"📤 Left → `{chat}`")
+            return await eor(event, f"{E['no']} {sc('leave fail')} {mono(str(e)[:50])}")
+    await done(event, f"{E['rocket']} {sc('left')} {E['arrow']} {mono(str(chat))}", secs=6)
 
 
 # ══════════════════════════════════════════════════════════════
-#                       ʙʀᴏᴀᴅᴄᴀsᴛ
+#                        ʙʀᴏᴀᴅᴄᴀsᴛ
 # ══════════════════════════════════════════════════════════════
 async def _do_broadcast(event, kind, text, status_msg=None):
     targets = await broadcast_targets(kind)
     if not targets:
-        return await eor(event, f"⚠️ `{kind}` ke liye koi chat nahi mili")
+        r = f"{E['warn']} {sc('koi chat nahi mili')} {mono(kind)}"
+        return await eor(event, r)
     src = None
     if not text and event.is_reply:
         src = await event.get_reply_message()
-    ok, fail = 0, 0
+    ok = fail = 0
     for cid in targets:
         try:
             if src is not None:
@@ -1682,13 +2259,14 @@ async def _do_broadcast(event, kind, text, status_msg=None):
                 await bot.send_message(cid, text)
             ok += 1
         except FloodWaitError as fw:
-            await asyncio.sleep(min(fw.seconds, 30))
-            fail += 1
+            await asyncio.sleep(min(fw.seconds, 30)); fail += 1
         except Exception:
             fail += 1
         await asyncio.sleep(0.6)
-    res = (f"📣 𝐁𝐑𝐎𝐀𝐃𝐂𝐀𝐒𝐓 [{kind}]\n━━━━━━━━━━━━━━━\n"
-           f"✅ Sent `{ok}`\n❌ Fail `{fail}`")
+    res = "\n".join([top(), sub(f"{E['sat']} {sc('broadcast')} {mono(kind)}"), sub(""),
+                     sub(f" {E['ok']} {sc('sent')} ‣ {mono(str(ok))}"),
+                     sub(f" {E['no']} {sc('fail')} ‣ {mono(str(fail))}"),
+                     sub(""), sub(FOOT), f"╰{'─' * 30}╯"])
     if status_msg:
         try:
             await status_msg.edit(res)
@@ -1702,8 +2280,8 @@ async def _do_broadcast(event, kind, text, status_msg=None):
 async def cmd_gcast(event, arg):
     text = (arg or "").strip()
     if not text and not event.is_reply:
-        return await eor(event, f"❌ `{PREFIX}gcast <text>` ya kisi message pe reply")
-    st = await eor(event, "📣 Groups me broadcast shuru…")
+        return await eor(event, f"{E['no']} {mono('.gcast <text>')} {sc('ya reply')}")
+    st = await flash(event, f"{E['sat']} {sc('groups me broadcast')}…", secs=30)
     await _do_broadcast(event, "group", text, st)
 
 
@@ -1711,34 +2289,32 @@ async def cmd_gcast(event, arg):
 async def cmd_ucast(event, arg):
     text = (arg or "").strip()
     if not text and not event.is_reply:
-        return await eor(event, f"❌ `{PREFIX}ucast <text>` ya kisi message pe reply")
-    st = await eor(event, "📣 Users ko broadcast shuru…")
+        return await eor(event, f"{E['no']} {mono('.ucast <text>')} {sc('ya reply')}")
+    st = await flash(event, f"{E['sat']} {sc('users ko broadcast')}…", secs=30)
     await _do_broadcast(event, "private", text, st)
 
 
 @register_cmd("bc")
 async def cmd_bc(event, arg):
     parts = (arg or "").split(maxsplit=1)
-    if not parts or parts[0].lower() not in ("group", "all", "private", "db", "channel"):
-        return await eor(event, f"❌ `{PREFIX}bc <group|all|private|db> <text>`")
+    kinds = ("group", "all", "private", "db", "channel")
+    if not parts or parts[0].lower() not in kinds:
+        return await eor(event, f"{E['dot']} {mono('.bc group|all|private|db <text>')}")
     kind = parts[0].lower()
     text = parts[1].strip() if len(parts) > 1 else ""
     if not text and not event.is_reply:
-        return await eor(event, "❌ Text do ya kisi message pe reply karo")
-    st = await eor(event, f"📣 Broadcast `[{kind}]` shuru…")
+        return await eor(event, f"{E['no']} {sc('text do ya reply karo')}")
+    st = await flash(event, f"{E['sat']} {sc('broadcast')} {mono(kind)}…", secs=30)
     await _do_broadcast(event, kind, text, st)
 
 
-async def _auto_loop(cfg, cfg_file, task_holder_key, forward: bool):
-    """autobc / autofw ka background loop."""
-    name = "AUTOFW" if forward else "AUTOBC"
+async def _auto_loop(cfg, forward):
     try:
         while True:
             targets = await broadcast_targets("db") or await broadcast_targets("group")
             for cid in targets:
                 try:
-                    msg = await bot.get_messages(cfg.get("chat_id"),
-                                                 ids=int(cfg.get("msg_id")))
+                    msg = await bot.get_messages(cfg.get("chat_id"), ids=int(cfg.get("msg_id")))
                     if msg is None:
                         continue
                     if forward:
@@ -1755,7 +2331,7 @@ async def _auto_loop(cfg, cfg_file, task_holder_key, forward: bool):
     except asyncio.CancelledError:
         return
     except Exception as e:
-        print(f"[{name} CRASH] {str(e)[:80]}")
+        print(f"[AUTO LOOP] {str(e)[:80]}")
 
 
 def _auto_stop(task):
@@ -1770,60 +2346,61 @@ def _auto_stop(task):
 async def _auto_handler(event, sub, cfg, cfg_file, task_get, task_set, forward):
     parts = (sub or "").split()
     action = parts[0].lower() if parts else "get"
+    label = "autofw" if forward else "autobc"
 
     if action == "add":
         if not event.is_reply:
-            return await eor(event, f"❌ Jise broadcast karna hai us message pe reply karo\n"
-                                    f"👉 `{PREFIX}autobc add`")
+            return await eor(event, f"{E['no']} {sc('reply karke')} {mono('.' + label + ' add')}")
         r = await event.get_reply_message()
         cfg["chat_id"] = int(event.chat_id)
         cfg["msg_id"] = int(r.id)
         cfg["text"] = (r.raw_text or "")[:80]
         save_json(cfg_file, cfg)
-        return await eor(event, f"💾 Message store ho gaya → id `{cfg['msg_id']}`\n"
-                                f"👉 ab `{PREFIX}{'autofw' if forward else 'autobc'} on`")
+        return await done(event, f"{E['save']} {sc('message store ho gaya')} {E['arrow']} {mono(str(cfg['msg_id']))}\n"
+                                 f"{E['dot']} {mono('.' + label + ' on')}", secs=8)
 
     if action == "delay":
         try:
             d = int(parts[1])
         except Exception:
-            return await eor(event, "❌ `.autobc delay <seconds>`")
+            return await eor(event, f"{E['dot']} {mono('.' + label + ' delay <seconds>')}")
         cfg["delay"] = max(30, d)
         save_json(cfg_file, cfg)
-        return await eor(event, f"⏱ Delay → `{cfg['delay']}s` (min 30s)")
+        return await done(event, f"{E['clock']} {sc('delay')} {E['arrow']} {mono(str(cfg['delay']) + 's')}", secs=6)
 
     if action == "get":
-        return await eor(event, f"╭─〔 {'📣 AUTOFW' if forward else '📣 AUTOBC'} 〕─╮\n"
-                                f"│ State `{'ON' if cfg.get('on') else 'OFF'}`\n"
-                                f"│ Msg id `{cfg.get('msg_id')}`\n"
-                                f"│ Delay `{cfg.get('delay')}s`\n"
-                                f"│ Targets `{len(BCDB) or 'all groups'}`\n"
-                                f"╰──────────╯\n"
-                                f"{(cfg.get('text') or '')[:80]}")
+        return await eor(event, "\n".join([
+            top(), sub(f"{E['sat']} {sc(label)}"),
+            sub(""),
+            sub(f" {E['dot']} {sc('state')}   ‣ {mono('ON' if cfg.get('on') else 'OFF')}"),
+            sub(f" {E['dot']} {sc('msg id')}  ‣ {mono(str(cfg.get('msg_id')))}"),
+            sub(f" {E['dot']} {sc('delay')}   ‣ {mono(str(cfg.get('delay')) + 's')}"),
+            sub(f" {E['dot']} {sc('targets')} ‣ {mono(str(len(BCDB)) or 'all groups')}"),
+            sub(""), sub(FOOT), f"╰{'─' * 30}╯"]))
 
     if action == "del":
         cfg.update({"on": False, "chat_id": None, "msg_id": None, "text": ""})
         save_json(cfg_file, cfg)
         task_set(_auto_stop(task_get()))
-        return await eor(event, "🗑 Stored message delete kar diya")
+        return await done(event, f"{E['trash']} {sc('stored message delete')}", secs=6)
 
     if action == "on":
         if not cfg.get("msg_id"):
-            return await eor(event, f"❌ Pehle `{PREFIX}{'autofw' if forward else 'autobc'} add` karo")
+            return await eor(event, f"{E['no']} {sc('pehle')} {mono('.' + label + ' add')}")
         cfg["on"] = True
         save_json(cfg_file, cfg)
         task_set(_auto_stop(task_get()))
-        task_set(asyncio.create_task(_auto_loop(cfg, cfg_file, "", forward)))
-        return await eor(event, f"▶️ Auto-{'forward' if forward else 'broadcast'} ON "
-                                f"(har `{cfg.get('delay')}s` me)")
+        task_set(asyncio.create_task(_auto_loop(cfg, forward)))
+        return await done(event, f"{E['rocket']} {sc('auto ' + ('forward' if forward else 'broadcast') + ' on')} "
+                                 f"{E['arrow']} {mono(str(cfg.get('delay')) + 's')}", secs=6)
 
     if action == "off":
         cfg["on"] = False
         save_json(cfg_file, cfg)
         task_set(_auto_stop(task_get()))
-        return await eor(event, "⏹ Band kar diya")
+        return await done(event, f"{E['no']} {sc('band kar diya')}", secs=6)
 
-    return await eor(event, "❌ `.autobc add|on|off|get|del|delay <sec>`")
+    return await eor(event, f"{E['dot']} {mono('.' + label + ' add|on|off|get|del|delay <sec>')}")
 
 
 @register_cmd("autobc")
@@ -1831,8 +2408,7 @@ async def cmd_autobc(event, arg):
     def set_task(t):
         global AUTOBR_TASK
         AUTOBR_TASK = t
-    await _auto_handler(event, arg, AUTOBR, F_AUTOBR,
-                        lambda: AUTOBR_TASK, set_task, False)
+    await _auto_handler(event, arg, AUTOBR, F_AUTOBR, lambda: AUTOBR_TASK, set_task, False)
 
 
 @register_cmd("autofw")
@@ -1840,23 +2416,566 @@ async def cmd_autofw(event, arg):
     def set_task(t):
         global AUTOFW_TASK
         AUTOFW_TASK = t
-    await _auto_handler(event, arg, AUTOFW, F_AUTOFW,
-                        lambda: AUTOFW_TASK, set_task, True)
+    await _auto_handler(event, arg, AUTOFW, F_AUTOFW, lambda: AUTOFW_TASK, set_task, True)
 
 
 # ══════════════════════════════════════════════════════════════
-#                       ɢʀᴏᴜᴘ ᴍᴏᴅ
+#                       ᴘʀᴏᴛᴇᴄᴛɪᴏɴ
+# ══════════════════════════════════════════════════════════════
+@register_cmd("antidel", group_only=True)
+async def cmd_antidel(event, arg):
+    a = (arg or "").strip().lower()
+    if a not in ("on", "off"):
+        return await eor(event, f"{E['eye']} {sc('anti-delete')} {E['arrow']} "
+                                f"{mono('ON' if int(event.chat_id) in ANTIDEL else 'OFF')}\n"
+                                f"{E['dot']} {mono('.antidel on/off')}")
+    if a == "on":
+        ANTIDEL.add(int(event.chat_id)); msg = "ON"
+    else:
+        ANTIDEL.discard(int(event.chat_id)); msg = "OFF"
+    save_json(F_ANTIDEL, sorted(ANTIDEL))
+    await done(event, f"{E['eye']} {sc('anti-delete')} {E['arrow']} {sb(msg)}\n"
+                      f"{E['dot']} {sc('deleted msgs saved messages me jayenge')}", secs=8)
+
+
+@register_cmd("watchspam", group_only=True)
+async def cmd_watchspam(event, arg):
+    parts = (arg or "").split()
+    if len(parts) < 2:
+        return await eor(event, f"{E['eye']} {mono('.watchspam <limit> <seconds>')}\n"
+                                f"{E['dot']} {sc('jaise')} {mono('.watchspam 5 3')}")
+    try:
+        limit, secs = int(parts[0]), int(parts[1])
+    except Exception:
+        return await eor(event, f"{E['no']} {sc('dono number hone chahiye')}")
+    SPAMWATCH[str(event.chat_id)] = {"limit": max(2, limit), "sec": max(1, secs)}
+    save_json(F_SPAMWATCH, SPAMWATCH)
+    await done(event, f"{E['eye']} {sc('spam guard on')}\n"
+                      f"{E['dot']} {mono(str(limit))} {sc('msgs in')} {mono(str(secs)) + 's'} "
+                      f"{E['arrow']} {sc('mute')}", secs=8)
+
+
+@register_cmd("unwatchspam", group_only=True)
+async def cmd_unwatchspam(event, arg):
+    SPAMWATCH.pop(str(event.chat_id), None)
+    save_json(F_SPAMWATCH, SPAMWATCH)
+    await done(event, f"{E['eye']} {sc('spam guard off')}", secs=6)
+
+
+@register_cmd("setgpfp", group_only=True)
+async def cmd_setgpfp(event, arg):
+    if not event.is_reply:
+        return await eor(event, f"{E['no']} {sc('image pe reply karke')} {mono('.setgpfp')}")
+    r = await event.get_reply_message()
+    if not getattr(r, "photo", None):
+        return await eor(event, f"{E['no']} {sc('sirf photo')}")
+    st = await flash(event, f"{E['wand']} {sc('group photo set')}…", secs=10)
+    try:
+        raw = await r.download_media(file=bytes)
+        bio = BytesIO(raw); bio.name = "gpfp.jpg"
+        up = await bot.upload_file(bio)
+        await bot(functions.channels.EditPhotoRequest(
+            channel=event.chat_id,
+            photo=types.InputChatUploadedPhoto(up)))
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        conf = await eor(event, f"{E['wand']} {sc('group photo set ho gayi')}")
+        await _del_after(conf, TMP_TTL)
+    except Exception as e:
+        await eor(event, f"{E['no']} {sc('fail')} {E['arrow']} {mono(str(e)[:60])}")
+
+
+async def _gpfp_loop(chat):
+    try:
+        photos = GPFP_STATE.get("photos") or []
+        if not photos:
+            return
+        i = 0
+        while GPFP_STATE.get("on"):
+            raw = photos[i % len(photos)]
+            try:
+                bio = BytesIO(raw); bio.name = "gpfp.jpg"
+                up = await bot.upload_file(bio)
+                await bot(functions.channels.EditPhotoRequest(
+                    channel=chat, photo=types.InputChatUploadedPhoto(up)))
+            except Exception:
+                pass
+            i += 1
+            await asyncio.sleep(max(10, int(GPFP_STATE.get("delay", 10))))
+    except asyncio.CancelledError:
+        return
+    except Exception as e:
+        print(f"[GPFP] {str(e)[:60]}")
+
+
+@register_cmd("autogpfp", group_only=True)
+async def cmd_autogpfp(event, arg):
+    global GPFP_TASK
+    if not event.is_reply:
+        return await eor(event, f"{E['no']} {sc('photo/album pe reply karke')} {mono('.autogpfp 10')}")
+    r = await event.get_reply_message()
+    if not getattr(r, "photo", None):
+        return await eor(event, f"{E['no']} {sc('sirf photo')}")
+    try:
+        delay = int((arg or "10").split()[0])
+    except Exception:
+        delay = 10
+    st = await flash(event, f"{E['wand']} {sc('photos collect')}…", secs=15)
+    photos, gid = [], getattr(r, "grouped_id", None)
+    if gid:
+        try:
+            async for m in bot.iter_messages(event.chat_id, limit=20,
+                                             min_id=max(0, r.id - 15), max_id=r.id + 15):
+                if getattr(m, "grouped_id", None) == gid and getattr(m, "photo", None):
+                    raw = await m.download_media(file=bytes)
+                    if raw:
+                        photos.append(raw)
+        except Exception:
+            pass
+    if not photos:
+        raw = await r.download_media(file=bytes)
+        if raw:
+            photos.append(raw)
+    if not photos:
+        return await eor(event, f"{E['no']} {sc('photo download nahi hui')}")
+    GPFP_STATE.update({"on": True, "delay": max(10, delay), "photos": photos})
+    if GPFP_TASK and not GPFP_TASK.done():
+        try:
+            GPFP_TASK.cancel()
+        except Exception:
+            pass
+    GPFP_TASK = asyncio.create_task(_gpfp_loop(event.chat_id))
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    conf = await eor(event, f"{E['wand']} {sc('photo rotation on')}\n"
+                            f"{E['dot']} {mono(str(len(photos)))} {sc('photos · har')} "
+                            f"{mono(str(GPFP_STATE['delay']) + 's')}\n"
+                            f"{E['dot']} {mono('.stopgpfp')}")
+    await _del_after(conf, 8)
+
+
+@register_cmd("stopgpfp", group_only=True)
+async def cmd_stopgpfp(event, arg):
+    global GPFP_TASK
+    GPFP_STATE["on"] = False
+    GPFP_STATE["photos"] = []
+    if GPFP_TASK and not GPFP_TASK.done():
+        try:
+            GPFP_TASK.cancel()
+        except Exception:
+            pass
+    GPFP_TASK = None
+    await done(event, f"{E['no']} {sc('photo rotation off')}", secs=6)
+
+
+@register_cmd("rlock", group_only=True)
+async def cmd_rlock(event, arg):
+    """.rlock <text> (reply to user) — wo user msg kare to uska msg udd kar yahi text"""
+    uid, _ = await resolve_uid(event, arg)
+    if not uid:
+        return await eor(event, f"{E['no']} {sc('kisi user pe reply karo')}")
+    text = arg or ""
+    if event.is_reply and arg:
+        text = arg
+    if not text:
+        return await eor(event, f"{E['no']} {mono('.rlock <text>')}")
+    key = str(event.chat_id)
+    RLOCK.setdefault(key, {})[str(uid)] = text
+    save_json(F_RLOCK, RLOCK)
+    await done(event, f"{E['lock']} {sc('reply-lock on')} {E['arrow']} {mono(str(uid))}\n"
+                      f"{E['dot']} {text[:40]}", secs=8)
+
+
+@register_cmd("srlock", group_only=True)
+async def cmd_srlock(event, arg):
+    uid, _ = await resolve_uid(event, arg)
+    key = str(event.chat_id)
+    if not uid or str(uid) not in (RLOCK.get(key) or {}):
+        return await eor(event, f"{E['warn']} {sc('us user pe koi lock nahi')}")
+    RLOCK[key].pop(str(uid), None)
+    if not RLOCK[key]:
+        RLOCK.pop(key, None)
+    save_json(F_RLOCK, RLOCK)
+    await done(event, f"{E['trash']} {sc('reply-lock hata diya')} {E['arrow']} {mono(str(uid))}", secs=6)
+
+
+# ══════════════════════════════════════════════════════════════
+#                          ᴍᴇᴅɪᴀ
+# ══════════════════════════════════════════════════════════════
+async def _grab(event, arg, cmd):
+    url = (arg or "").strip()
+    if not url:
+        return await eor(event, f"{E['dot']} {mono('.' + cmd + ' <link>')}")
+    st = await flash(event, f"{E['wand']} {sc('downloading')}…", secs=60)
+    try:
+        path, info = await yt_download(url)
+    except Exception as e:
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        return await eor(event, f"{E['no']} {sc('download fail')} {E['arrow']} {mono(str(e)[:60])}")
+    if not path:
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        return await eor(event, f"{E['no']} {sc('media nahi mili')}")
+    title = str((info or {}).get("title") or "media")[:60]
+    try:
+        await bot.send_file(event.chat_id, path, caption=f"{E['wand']} {title}\n{FOOT}")
+        try:
+            await event.delete()
+        except Exception:
+            pass
+    except Exception as e:
+        await eor(event, f"{E['no']} {sc('send fail')} {mono(str(e)[:50])}")
+    finally:
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+
+
+@register_cmd("yt")
+async def cmd_yt(event, arg):
+    await _grab(event, arg, "yt")
+
+
+@register_cmd("ig")
+async def cmd_ig(event, arg):
+    await _grab(event, arg, "ig")
+
+
+@register_cmd("pt")
+async def cmd_pt(event, arg):
+    await _grab(event, arg, "pt")
+
+
+@register_cmd("fb")
+async def cmd_fb(event, arg):
+    await _grab(event, arg, "fb")
+
+
+# ══════════════════════════════════════════════════════════════
+#                           ғᴜɴ
+# ══════════════════════════════════════════════════════════════
+def _ttt_board(b):
+    cells = []
+    for i in range(9):
+        v = b[i]
+        cells.append(("❌" if v == "X" else "⭕" if v == "O" else str(i + 1)))
+    out = []
+    for r in range(3):
+        out.append("┃ " + " ┃ ".join(cells[r * 3:r * 3 + 3]) + " ┃")
+    return "\n".join(out)
+
+
+def _ttt_winner(b):
+    lines = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7),
+             (2, 5, 8), (0, 4, 8), (2, 4, 6)]
+    for a, c, d in lines:
+        if b[a] and b[a] == b[c] == b[d]:
+            return b[a]
+    return None
+
+
+@register_cmd("tictactoe")
+async def cmd_ttt_start(event, arg):
+    TTT[int(event.chat_id)] = {"board": [""] * 9, "turn": "X"}
+    await eor(event, "\n".join([
+        top(), sub(f"{E['dice']} {sc('tic tac toe')}"), sub(""),
+        _ttt_board([""] * 9),
+        sub(""), sub(f"{E['dot']} {mono('.ttt 1-9')} {sc('se move karo')}"),
+        sub(f"{E['dot']} {sc('tum')} ❌ · {sc('bot')} ⭕"),
+        sub(""), sub(FOOT), f"╰{'─' * 30}╯"]))
+
+
+@register_cmd("ttt")
+async def cmd_ttt_move(event, arg):
+    g = TTT.get(int(event.chat_id))
+    if not g:
+        return await eor(event, f"{E['dot']} {sc('pehle')} {mono('.tictactoe')}")
+    try:
+        pos = int((arg or "").split()[0]) - 1
+    except Exception:
+        return await eor(event, f"{E['no']} {mono('.ttt 1-9')}")
+    b = g["board"]
+    if not (0 <= pos < 9) or b[pos]:
+        return await eor(event, f"{E['warn']} {sc('ye cell khaali nahi')}")
+    b[pos] = "X"
+    if _ttt_winner(b) == "X":
+        TTT.pop(int(event.chat_id), None)
+        return await eor(event, f"{E['crown']} {sb('YOU WIN')} ❌\n{_ttt_board(b)}")
+    if "" not in b:
+        TTT.pop(int(event.chat_id), None)
+        return await eor(event, f"{E['dot']} {sc('draw')}\n{_ttt_board(b)}")
+    empty = [i for i, v in enumerate(b) if not v]
+    # bot: jeet sakte ho to jeeto, warna block, warna random
+    move = None
+    for i in empty:
+        b[i] = "O"
+        if _ttt_winner(b) == "O":
+            move = i
+        b[i] = ""
+        if move is not None:
+            break
+    if move is None:
+        for i in empty:
+            b[i] = "X"
+            if _ttt_winner(b) == "X":
+                move = i
+            b[i] = ""
+            if move is not None:
+                break
+    if move is None:
+        move = random.choice(empty) if empty else None
+    if move is not None:
+        b[move] = "O"
+    if _ttt_winner(b) == "O":
+        TTT.pop(int(event.chat_id), None)
+        return await eor(event, f"{E['bot']} {sb('BOT WINS')} ⭕\n{_ttt_board(b)}")
+    if "" not in b:
+        TTT.pop(int(event.chat_id), None)
+        return await eor(event, f"{E['dot']} {sc('draw')}\n{_ttt_board(b)}")
+    await eor(event, f"{E['dice']} {sc('your move')} ❌\n{_ttt_board(b)}\n"
+                     f"{E['dot']} {mono('.ttt 1-9')}")
+
+
+@register_cmd("rps")
+async def cmd_rps(event, arg):
+    choices = {"r": "🪨", "p": "📄", "s": "✂️",
+               "rock": "🪨", "paper": "📄", "scissor": "✂️", "scissors": "✂️"}
+    user = (arg or "").strip().lower()
+    if user not in choices:
+        return await eor(event, f"{E['dot']} {mono('.rps rock|paper|scissors')}")
+    botc = random.choice(["rock", "paper", "scissors"])
+    u = user[0]
+    b = botc[0]
+    if u == b:
+        res = sc("tie")
+    elif (u, b) in (("r", "s"), ("p", "r"), ("s", "p")):
+        res = sb("YOU WIN")
+    else:
+        res = sb("BOT WINS")
+    await eor(event, "\n".join([
+        top(), sub(f"{E['dice']} {sc('rock paper scissors')}"), sub(""),
+        sub(f" {E['crown']} {sc('you')} {choices[user]}   {E['bot']} {sc('bot')} {choices[botc]}"),
+        sub(""), sub(f" {E['spark']} {res}"), sub(""), sub(FOOT), f"╰{'─' * 30}╯"]))
+
+
+@register_cmd("roll")
+async def cmd_roll(event, arg):
+    try:
+        await event.delete()
+    except Exception:
+        pass
+    try:
+        await bot.send_message(event.chat_id, file=types.InputMediaDice("🎲"))
+    except Exception:
+        await eor(event, f"{E['no']} {sc('dice fail')}")
+
+
+@register_cmd("fact")
+async def cmd_fact(event, arg):
+    await eor(event, f"{E['spark']} {random.choice(FACTS)}\n\n{E['dot']} {FOOT}")
+
+
+# ══════════════════════════════════════════════════════════════
+#                        ᴀɪ & sᴜᴅᴏ
+# ══════════════════════════════════════════════════════════════
+@register_cmd("ai")
+async def cmd_ai(event, arg):
+    q = (arg or "").strip()
+    if not q:
+        return await eor(event, f"{E['dot']} {mono('.ai <sawaal>')}")
+    if not AI_URL:
+        return await eor(event, f"{E['warn']} {sc('ai set nahi hai')}\n"
+                                f"{E['dot']} {sc('env me')} {mono('AI_URL')} {sc('daalo')}\n"
+                                + mono('AI_URL="https://api.../?q={q}"'))
+    st = await flash(event, f"{E['gene']} {sc('soch raha hoon')}…", secs=30)
+    try:
+        url = AI_URL.replace("{q}", urllib.parse.quote(q)) if "{q}" in AI_URL \
+            else AI_URL + urllib.parse.quote(q)
+        r = requests.get(url, timeout=25)
+        ans = None
+        try:
+            d = r.json()
+            for k in ("result", "response", "answer", "reply", "message",
+                      "content", "text", "data"):
+                if isinstance(d, dict) and d.get(k):
+                    ans = d[k]
+                    break
+            if ans is None and isinstance(d, str):
+                ans = d
+        except Exception:
+            ans = r.text
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        if not ans:
+            return await eor(event, f"{E['no']} {sc('ai se jawab nahi mila')}")
+        await eor(event, f"{E['gene']} {sc('ai')}\n{E['dot']} {str(ans)[:1500]}\n\n{E['spark']} {FOOT}")
+    except Exception as e:
+        await eor(event, f"{E['no']} {sc('ai fail')} {E['arrow']} {mono(str(e)[:60])}")
+
+
+@register_cmd("sudo", "addadmin", owner_only=True)
+async def cmd_sudo(event, arg):
+    targets = await get_targets(event, arg)
+    if not targets:
+        return await eor(event, f"{E['no']} {sc('reply / @user / id do')}")
+    added = [u for u in targets if u != OWNER_ID and u not in ADMINS]
+    ADMINS.update(added)
+    save_json(F_ADMINS, sorted(ADMINS))
+    await done(event, f"{E['crown']} {sc('sudo added')} {E['arrow']} "
+                      f"{mono(', '.join(map(str, sorted(added)))) or '—'}", secs=8)
+
+
+@register_cmd("delsudo", "deladmin", owner_only=True)
+async def cmd_delsudo(event, arg):
+    targets = await get_targets(event, arg)
+    if not targets:
+        return await eor(event, f"{E['no']} {sc('reply / @user / id do')}")
+    removed = [u for u in targets if u in ADMINS]
+    ADMINS.difference_update(targets)
+    save_json(F_ADMINS, sorted(ADMINS))
+    await done(event, f"{E['trash']} {sc('sudo removed')} {E['arrow']} "
+                      f"{mono(', '.join(map(str, sorted(removed)))) or '—'}", secs=8)
+
+
+@register_cmd("list", owner_only=True)
+async def cmd_list(event, arg):
+    what = (arg or "").strip().lower()
+    if what == "sudo":
+        lst = [f" {E['dot']} {mono(str(a))}" for a in sorted(ADMINS)] or \
+              [f" {E['warn']} {sc('koi sudo nahi')}"]
+        return await eor(event, "\n".join([top(), sub(f"{E['crown']} {sc('sudo')} {mono(str(len(ADMINS)))}"),
+                                           sub("")] + [sub(x) for x in lst] +
+                                          [sub(""), sub(f" {E['crown2']} {sc('owner')} {mono(str(OWNER_ID))}"),
+                                           sub(FOOT), f"╰{'─' * 30}╯"]))
+    if what == "bots":
+        return await cmd_listbots(event, "")
+    return await eor(event, f"{E['dot']} {mono('.list sudo')} · {mono('.list bots')}")
+
+
+@register_cmd("admins", owner_only=True)
+async def cmd_admins(event, arg):
+    return await cmd_list(event, "sudo")
+
+
+# ══════════════════════════════════════════════════════════════
+#                       ʙᴏᴛ ᴍᴀɴᴀɢᴇʀ
+# ══════════════════════════════════════════════════════════════
+@register_cmd("addbots", owner_only=True)
+async def cmd_addbots(event, arg):
+    """.addbots @b1 @b2 — bot usernames save karta hai"""
+    names = [p.lstrip("@") for p in (arg or "").split() if p.strip()]
+    if not names:
+        return await eor(event, f"{E['dot']} {mono('.addbots @bot1 @bot2')}\n"
+                                f"{E['dot']} {mono('.listbots')} · {mono('.invitebots')} · {mono('.promotebots')}")
+    for n in names:
+        if n not in SAVED_BOTS:
+            SAVED_BOTS.append(n)
+    save_json(F_BOTS, SAVED_BOTS)
+    await done(event, f"{E['bot']} {sc('bots saved')} {mono(str(len(names)))}\n"
+                      f"{E['dot']} {sc('total')} {mono(str(len(SAVED_BOTS)))}", secs=8)
+
+
+@register_cmd("listbots")
+async def cmd_listbots(event, arg=""):
+    if not SAVED_BOTS:
+        return await eor(event, f"{E['note']} {sc('koi bot saved nahi')}\n{E['dot']} {mono('.addbots @bot1')}")
+    lines = [top(), sub(f"{E['bot']} {sc('saved bots')} {mono(str(len(SAVED_BOTS)))}"), sub("")]
+    for i, b in enumerate(SAVED_BOTS, 1):
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ @{b}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
+
+
+@register_cmd("invitebots", group_only=True, owner_only=True)
+async def cmd_invitebots(event, arg):
+    if not SAVED_BOTS:
+        return await eor(event, f"{E['warn']} {sc('pehle')} {mono('.addbots @bot1')}")
+    st = await flash(event, f"{E['bot']} {sc('bots invite')}…", secs=30)
+    ok = fail = 0
+    for b in SAVED_BOTS:
+        try:
+            await bot(functions.channels.InviteToChannelRequest(
+                channel=event.chat_id, users=[b]))
+            ok += 1
+        except FloodWaitError as fw:
+            await asyncio.sleep(fw.seconds); fail += 1
+        except Exception:
+            fail += 1
+        await asyncio.sleep(1)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    conf = await eor(event, f"{E['bot']} {sc('bots invited')} {mono(str(ok))} · {sc('fail')} {mono(str(fail))}")
+    await _del_after(conf, TMP_TTL)
+
+
+@register_cmd("promotebots", group_only=True, owner_only=True)
+async def cmd_promotebots(event, arg):
+    if not SAVED_BOTS:
+        return await eor(event, f"{E['warn']} {sc('pehle')} {mono('.addbots @bot1')}")
+    st = await flash(event, f"{E['crown']} {sc('bots promote')}…", secs=30)
+    ok = fail = 0
+    for b in SAVED_BOTS:
+        okk, _ = await _set_admin(event.chat_id, b, FULL_RIGHTS)
+        ok += 1 if okk else 0
+        fail += 0 if okk else 1
+        await asyncio.sleep(1)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    conf = await eor(event, f"{E['crown']} {sc('bots promoted')} {mono(str(ok))} · {sc('fail')} {mono(str(fail))}")
+    await _del_after(conf, TMP_TTL)
+
+
+
+
+# ══════════════════════════════════════════════════════════════
+#                        ɢʀᴏᴜᴘ ᴍᴏᴅ
 # ══════════════════════════════════════════════════════════════
 BASIC_RIGHTS = types.ChatAdminRights(
     delete_messages=True, ban_users=True, invite_users=True,
-    pin_messages=True, manage_call=True,
-)
+    pin_messages=True, manage_call=True)
 FULL_RIGHTS = types.ChatAdminRights(
     change_info=True, post_messages=True, edit_messages=True,
     delete_messages=True, ban_users=True, invite_users=True,
-    pin_messages=True, add_admins=True, manage_call=True,
-)
+    pin_messages=True, add_admins=True, manage_call=True)
 NO_RIGHTS = types.ChatAdminRights()
+
+
+async def _set_admin(chat, uid, rights, rank=""):
+    """raw EditAdminRequest — client.edit_admin() me admin_rights nahi chalta"""
+    try:
+        await bot(functions.channels.EditAdminRequest(
+            channel=chat, user_id=uid, admin_rights=rights, rank=rank or ""))
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:70]
 
 
 async def _act_kick(chat, uid):
@@ -1865,8 +2984,7 @@ async def _act_kick(chat, uid):
         return True, ""
     except Exception:
         try:
-            await bot(functions.messages.DeleteChatUserRequest(
-                chat_id=chat, user_id=uid))
+            await bot(functions.messages.DeleteChatUserRequest(chat_id=chat, user_id=uid))
             return True, ""
         except Exception as e:
             return False, str(e)[:60]
@@ -1877,8 +2995,7 @@ async def _act_ban(chat, uid):
         await bot.edit_permissions(chat, uid, view_messages=False)
         return True, ""
     except Exception:
-        ok, err = await _act_kick(chat, uid)
-        return ok, err
+        return await _act_kick(chat, uid)
 
 
 async def _act_unban(chat, uid):
@@ -1889,9 +3006,12 @@ async def _act_unban(chat, uid):
         return False, str(e)[:60]
 
 
-async def _act_mute(chat, uid):
+async def _act_mute(chat, uid, until=None):
     try:
-        await bot.edit_permissions(chat, uid, until_date=None, send_messages=False)
+        if until:
+            await bot.edit_permissions(chat, uid, until_date=until, send_messages=False)
+        else:
+            await bot.edit_permissions(chat, uid, until_date=None, send_messages=False)
         return True, ""
     except Exception as e:
         return False, str(e)[:60]
@@ -1909,215 +3029,247 @@ async def _act_unmute(chat, uid):
 async def cmd_kick(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila — reply / @user / id")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')} {E['arrow']} {mono('reply / @user / id')}")
     ok, err = await _act_kick(event.chat_id, uid)
-    await eor(event, f"👢 Kicked → `{uid}`" if ok else f"❌ `{err}`")
+    await done(event, f"{E['sword']} {sc('kicked')} {E['arrow']} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=6)
 
 
 @register_cmd("delkick")
 async def cmd_delkick(event, arg):
     uid, r = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     if r is not None:
         try:
             await r.delete()
         except Exception:
             pass
     ok, err = await _act_kick(event.chat_id, uid)
-    await eor(event, f"👢 Kick + delete → `{uid}`" if ok else f"❌ `{err}`")
+    await done(event, f"{E['sword']} {sc('kick + delete')} {E['arrow']} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=6)
 
 
 @register_cmd("ban")
 async def cmd_ban(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     ok, err = await _act_ban(event.chat_id, uid)
-    await eor(event, f"⛔ Banned → `{uid}`" if ok else f"❌ `{err}`")
+    await done(event, f"{E['lock']} {sc('banned')} {E['arrow']} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=6)
 
 
 @register_cmd("delban")
 async def cmd_delban(event, arg):
     uid, r = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     if r is not None:
         try:
             await r.delete()
         except Exception:
             pass
     ok, err = await _act_ban(event.chat_id, uid)
-    await eor(event, f"⛔ Ban + delete → `{uid}`" if ok else f"❌ `{err}`")
+    await done(event, f"{E['lock']} {sc('ban + delete')} {E['arrow']} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=6)
 
 
 @register_cmd("unban")
 async def cmd_unban(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     ok, err = await _act_unban(event.chat_id, uid)
-    await eor(event, f"♻️ Unbanned → `{uid}`" if ok else f"❌ `{err}`")
+    await done(event, f"{E['ok']} {sc('unbanned')} {E['arrow']} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=6)
 
 
-@register_cmd("mute")
+@register_cmd("mute", "m")
 async def cmd_mute(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     ok, err = await _act_mute(event.chat_id, uid)
     if ok:
-        return await eor(event, f"🔇 Muted → `{uid}`")
+        return await done(event, f"{E['lock']} {sc('muted')} {E['arrow']} {mono(str(uid))}", secs=6)
     MUTED.add(uid)
-    await eor(event, f"🔇 Admin right nahi → local mute laga diya (msgs delete honge) `{uid}`\n`{err}`")
+    await done(event, f"{E['lock']} {sc('local mute')} {E['arrow']} {mono(str(uid))}\n"
+                      f"{E['dot']} {sc('msgs delete honge')} · {mono(err)}", secs=8)
 
 
 @register_cmd("delmute")
 async def cmd_delmute(event, arg):
     uid, r = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     if r is not None:
         try:
             await r.delete()
         except Exception:
             pass
-    ok, err = await _act_mute(event.chat_id, uid)
-    if ok:
-        return await eor(event, f"🔇 Mute + delete → `{uid}`")
-    MUTED.add(uid)
-    await eor(event, f"🔇 Local mute + delete → `{uid}`")
+    ok, _ = await _act_mute(event.chat_id, uid)
+    if not ok:
+        MUTED.add(uid)
+    await done(event, f"{E['lock']} {sc('mute + delete')} {E['arrow']} {mono(str(uid))}", secs=6)
 
 
-@register_cmd("unmute")
+@register_cmd("unmute", "sm")
 async def cmd_unmute(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
-    ok, _ = await _act_unmute(event.chat_id, uid)
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
+    await _act_unmute(event.chat_id, uid)
     MUTED.discard(uid)
-    await eor(event, f"🔊 Unmuted → `{uid}`")
+    await done(event, f"{E['ok']} {sc('unmuted')} {E['arrow']} {mono(str(uid))}", secs=6)
+
+
+@register_cmd("tmute")
+async def cmd_tmute(event, arg):
+    """.tmute 10m (reply) — timed mute"""
+    uid, _ = await resolve_uid(event, arg)
+    if not uid:
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
+    tok = (arg or "").strip().split()
+    tok = tok[-1] if tok else "10m"
+    secs = parse_time(tok)
+    if not secs:
+        return await eor(event, f"{E['dot']} {mono('.tmute 10m')} · {mono('2h')} · {mono('3d')}")
+    ok, err = await _act_mute(event.chat_id, uid,
+                              until=int(time.time() + secs))
+    await done(event, f"{E['clock']} {sc('muted for')} {mono(tok)} {E['arrow']} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=8)
 
 
 @register_cmd("getmute")
 async def cmd_getmute(event, arg):
-    txt = "🔇 𝐌𝐔𝐓𝐄𝐃\n━━━━━━━━━━━━━━━\n"
+    lines = [top(), sub(f"{E['lock']} {sc('muted users')}"), sub("")]
+    found = 0
     try:
-        found = []
         async for u in bot.iter_participants(event.chat_id,
                                              filter=types.ChannelParticipantsBanned("")):
-            found.append(u)
-        if found:
-            for i, u in enumerate(found[:30], 1):
-                txt += f"`{i}.` {u.first_name} — `{u.id}`\n"
-        else:
-            txt += "⚠️ Telegram me koi muted nahi\n"
+            found += 1
+            if found <= 25:
+                lines.append(sub(f" {E['dot']} {u.first_name} ‣ {mono(str(u.id))}"))
     except Exception:
-        txt += "⚠️ List nahi mil saki (admin right chahiye)\n"
+        lines.append(sub(f" {E['warn']} {sc('telegram list nahi mil saki')}"))
+    if not found:
+        lines.append(sub(f" {E['warn']} {sc('koi muted nahi')}"))
     if MUTED:
-        txt += f"\n🧹 Local delete-mute ({len(MUTED)})\n"
-        for i, u in enumerate(sorted(MUTED), 1):
-            txt += f"`{i}.` `{u}`\n"
-    await eor(event, txt)
+        lines.append(sub(""))
+        lines.append(sub(f" {E['trash']} {sc('local delete-mute')} {mono(str(len(MUTED)))}"))
+        for u in sorted(MUTED)[:20]:
+            lines.append(sub(f"   {E['dot']} {mono(str(u))}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
-@register_cmd("staff")
+@register_cmd("staff", group_only=True)
 async def cmd_staff(event, arg):
-    if not event.is_group:
-        return await eor(event, "❌ Group only")
-    txt = "🛡 𝐒𝐓𝐀𝐅𝐅\n━━━━━━━━━━━━━━━\n"
+    lines = [top(), sub(f"{E['shield']} {sc('staff')}"), sub("")]
     try:
         i = 0
         async for u in bot.iter_participants(event.chat_id,
                                              filter=types.ChannelParticipantsAdmins):
             i += 1
-            rank = getattr(u.participant, "rank", None) if hasattr(u, "participant") else None
+            rank = getattr(getattr(u, "participant", None), "rank", None)
             tag = f" · {rank}" if rank else ""
-            txt += f"`{i}.` {u.first_name} — `{u.id}`{tag}\n"
+            if i <= 30:
+                lines.append(sub(f" {E['dot']} {u.first_name} ‣ {mono(str(u.id))}{tag}"))
+        if not i:
+            lines.append(sub(f" {E['warn']} {sc('koi admin nahi mila')}"))
     except Exception as e:
-        return await eor(event, f"❌ `{str(e)[:60]}`")
-    await eor(event, txt)
+        return await eor(event, f"{E['no']} {mono(str(e)[:60])}")
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
 @register_cmd("promote")
 async def cmd_promote(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
-    rest = (arg or "").split(maxsplit=1)
-    rank = rest[1].strip()[:16] if len(rest) > 1 else ""
-    try:
-        await bot.edit_admin(event.chat_id, uid,
-                             admin_rights=BASIC_RIGHTS, rank=rank)
-        await eor(event, f"🛡 Promoted → `{uid}`" + (f" · `{rank}`" if rank else ""))
-    except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
+    parts = (arg or "").split(maxsplit=1)
+    rank = parts[1].strip()[:16] if len(parts) > 1 and event.is_reply else ""
+    if not event.is_reply and len(parts) > 1:
+        rank = parts[1].strip()[:16]
+    ok, err = await _set_admin(event.chat_id, uid, BASIC_RIGHTS, rank)
+    await done(event, f"{E['crown']} {sc('promoted')} {E['arrow']} {mono(str(uid))}"
+                      + (f" · {mono(rank)}" if rank else "") if ok
+               else f"{E['no']} {mono(err)}", secs=8)
 
 
 @register_cmd("fullpromote")
 async def cmd_fullpromote(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
-    rest = (arg or "").split(maxsplit=1)
-    rank = rest[1].strip()[:16] if len(rest) > 1 else ""
-    try:
-        await bot.edit_admin(event.chat_id, uid,
-                             admin_rights=FULL_RIGHTS, rank=rank)
-        await eor(event, f"👑 Full-promoted → `{uid}`" + (f" · `{rank}`" if rank else ""))
-    except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
+    parts = (arg or "").split(maxsplit=1)
+    rank = ""
+    if event.is_reply and arg:
+        rank = arg.strip()[:16]
+    elif not event.is_reply and len(parts) > 1:
+        rank = parts[1].strip()[:16]
+    ok, err = await _set_admin(event.chat_id, uid, FULL_RIGHTS, rank)
+    await done(event, f"{E['crown2']} {sc('full promoted')} {E['arrow']} {mono(str(uid))}"
+                      + (f" · {mono(rank)}" if rank else "") if ok
+               else f"{E['no']} {mono(err)}", secs=8)
 
 
 @register_cmd("demote")
 async def cmd_demote(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
-    try:
-        await bot.edit_admin(event.chat_id, uid, admin_rights=NO_RIGHTS, rank="")
-        await eor(event, f"⬇️ Demoted → `{uid}`")
-    except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
+    ok, err = await _set_admin(event.chat_id, uid, NO_RIGHTS, "")
+    await done(event, f"{E['trash']} {sc('demoted')} {E['arrow']} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=8)
 
 
 @register_cmd("title")
 async def cmd_title(event, arg):
+    """.title @user <title> ya reply + .title <title>
+    member ko bhi custom tag lagta hai (empty admin rights ke saath)"""
     parts = (arg or "").split(maxsplit=1)
-    if not event.is_reply and len(parts) < 2:
-        return await eor(event, f"❌ `{PREFIX}title @user <title>` ya reply + `{PREFIX}title <title>`")
     if event.is_reply:
         uid, _ = await resolve_uid(event, "")
         title = (arg or "").strip()[:16]
-    else:
+    elif len(parts) >= 2:
         uid, _ = await resolve_uid(event, parts[0])
         title = parts[1].strip()[:16]
+    else:
+        return await eor(event, f"{E['dot']} {mono('.title @user <tag>')}\n"
+                                f"{E['dot']} {sc('ya reply karke')} {mono('.title <tag>')}")
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
+    if not title:
+        return await eor(event, f"{E['no']} {sc('tag/title likho')}")
+    # admin hai to uske rights preserve, warna empty rights se sirf tag
+    rights = types.ChatAdminRights()
     try:
         res = await bot(functions.channels.GetParticipantRequest(
             channel=event.chat_id, participant=uid))
-        rights = getattr(res.participant, "admin_rights", None)
-        if rights is None:
-            return await eor(event, "❌ Ye admin hi nahi hai")
-        await bot(functions.channels.EditAdminRequest(
-            channel=event.chat_id, user_id=uid,
-            admin_rights=rights, rank=title))
-        await eor(event, f"🏷 Title set → `{title}`")
-    except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        cur = getattr(res.participant, "admin_rights", None)
+        if cur is not None:
+            rights = cur
+    except Exception:
+        pass
+    ok, err = await _set_admin(event.chat_id, uid, rights, title)
+    await done(event, f"{E['crown']} {sc('tag set')} {E['arrow']} {mono(title)}\n"
+                      f"{E['gem']} {sc('user')} {mono(str(uid))}" if ok
+               else f"{E['no']} {mono(err)}", secs=8)
 
 
 @register_cmd("pin")
 async def cmd_pin(event, arg):
     if not event.is_reply:
-        return await eor(event, "❌ Reply karke `.pin` likho")
+        return await eor(event, f"{E['no']} {sc('reply karke')} {mono('.pin')}")
     r = await event.get_reply_message()
     try:
         await r.pin(notify=("loud" in (arg or "").lower()))
-        await eor(event, "📌 Pin kar diya")
+        await done(event, f"{E['key']} {sc('pin kar diya')}", secs=6)
     except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        await eor(event, f"{E['no']} {mono(str(e)[:60])}")
 
 
 @register_cmd("unpin")
@@ -2131,27 +3283,66 @@ async def cmd_unpin(event, arg):
             await r.unpin()
         else:
             await bot.unpin_message(event.chat_id)
-        await eor(event, "📌 Unpin ho gaya")
+        await done(event, f"{E['trash']} {sc('unpin ho gaya')}", secs=6)
     except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        await eor(event, f"{E['no']} {mono(str(e)[:60])}")
 
 
 @register_cmd("group")
 async def cmd_group(event, arg):
     parts = (arg or "").split(maxsplit=1)
     if len(parts) < 2 or parts[0].lower() not in ("title", "desc", "description"):
-        return await eor(event, f"❌ `{PREFIX}group title <text>` / `{PREFIX}group desc <text>`")
+        return await eor(event, f"{E['dot']} {mono('.group title <text>')}\n"
+                                f"{E['dot']} {mono('.group desc <text>')}")
     what, val = parts[0].lower(), parts[1].strip()
     try:
         if what == "title":
-            await bot(functions.channels.EditTitleRequest(
-                channel=event.chat_id, title=val[:255]))
+            await bot(functions.channels.EditTitleRequest(channel=event.chat_id, title=val[:255]))
         else:
-            await bot(functions.messages.EditChatAboutRequest(
-                peer=event.chat_id, about=val[:255]))
-        await eor(event, f"✅ Group {what} update ho gaya")
+            await bot(functions.messages.EditChatAboutRequest(peer=event.chat_id, about=val[:255]))
+        await done(event, f"{E['ok']} {sc('group ' + what + ' updated')}", secs=6)
     except Exception as e:
-        await eor(event, f"❌ `{str(e)[:70]}`")
+        await eor(event, f"{E['no']} {mono(str(e)[:60])}")
+
+
+async def _lock_mute_all(event, mute=True):
+    """chat ke sab members ko mute / unmute (send_messages band / allow).
+
+    .lock  → sab mute + messages 0.3s me udd
+    .slock → har type lock + sab mute
+    .unlock (all) → sab wapas unmute
+    """
+    ok = fail = 0
+    label = f"{E['lock']} {sc('mute all')}…" if mute else f"{E['ok']} {sc('unmute all')}…"
+    st = await flash(event, label, secs=120)
+    try:
+        async for user in bot.iter_participants(event.chat_id):
+            if getattr(user, "bot", False) or getattr(user, "deleted", False):
+                continue
+            if user.id in ADMINS or user.id == OWNER_ID:
+                continue          # apne admins ko mat chhedo
+            try:
+                await bot.edit_permissions(event.chat_id, user.id,
+                                           send_messages=not mute)
+                ok += 1
+            except FloodWaitError as fw:
+                await asyncio.sleep(fw.seconds)
+                try:
+                    await bot.edit_permissions(event.chat_id, user.id,
+                                               send_messages=not mute)
+                    ok += 1
+                except Exception:
+                    fail += 1
+            except Exception:
+                fail += 1
+    except Exception:
+        fail = -1                  # rights nahi hain
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    return ok, fail
 
 
 @register_cmd("lock", group_only=True)
@@ -2159,20 +3350,26 @@ async def cmd_lock(event, arg):
     a = (arg or "").strip().lower()
     ltype = a.split()[0] if a else "all"
     if ltype == "list":
-        return await eor(event, "🔒 Types → `" + "`, `".join(LOCK_TYPES) + "`")
+        return await eor(event, f"{E['lock']} {sc('types')}\n{E['dot']} " +
+                         mono(", ".join(LOCK_TYPES)))
     if ltype not in LOCK_TYPES:
-        return await eor(event, f"❌ Galat type `{ltype}`\n"
-                                f"🔒 Types → `" + "`, `".join(LOCK_TYPES) + "`")
+        return await eor(event, f"{E['no']} {sc('galat type')} {mono(ltype)}\n"
+                                 f"{E['dot']} " + mono(", ".join(LOCK_TYPES)))
     key = str(event.chat_id)
     cur = set(LOCKS.get(key) or [])
     if ltype in cur:
-        return await eor(event, f"⚠️ `{ltype}` pehle se locked hai")
+        return await eor(event, f"{E['warn']} {mono(ltype)} {sc('pehle se locked hai')}")
     cur.add(ltype)
     LOCKS[key] = sorted(cur)
     save_json(F_LOCKS, LOCKS)
-    await eor(event, f"🔒 Lock `{ltype}` ON\n"
-                     f"Ab matching messages `{LOCK_DELAY}s` me delete honge\n"
-                     f"Active → `{', '.join(LOCKS[key])}`")
+    extra = ""
+    if ltype == "all" and event.is_group:
+        mok, mfail = await _lock_mute_all(event, True)
+        extra = (f"\n{E['dot']} {sc('members muted')} {mono(str(mok))}"
+                 f" · {sc('fail')} {mono(str(mfail))}")
+    await done(event, f"{E['lock']} {sc('lock')} {mono(ltype)} {sb('ON')}\n"
+                      f"{E['dot']} {sc('matching msgs')} {mono(str(LOCK_DELAY) + 's')} {sc('me udd jayenge')}\n"
+                      f"{E['dot']} {sc('active')} ‣ {mono(', '.join(LOCKS[key]))}{extra}", secs=8)
 
 
 @register_cmd("unlock", group_only=True)
@@ -2186,38 +3383,148 @@ async def cmd_unlock(event, arg):
     elif ltype in cur:
         cur.discard(ltype)
     else:
-        return await eor(event, f"⚠️ `{ltype}` locked hai hi nahi")
+        return await eor(event, f"{E['warn']} {mono(ltype)} {sc('locked hai hi nahi')}")
     if cur:
         LOCKS[key] = sorted(cur)
     else:
         LOCKS.pop(key, None)
     save_json(F_LOCKS, LOCKS)
-    await eor(event, f"🔓 Unlock `{ltype}`\n"
-                     f"Bache → `{', '.join(sorted(cur)) or 'kuch nahi'}`")
+    extra = ""
+    if ltype == "all" and event.is_group:
+        mok, mfail = await _lock_mute_all(event, False)
+        extra = (f"\n{E['dot']} {sc('members unmuted')} {mono(str(mok))}"
+                 f" · {sc('fail')} {mono(str(mfail))}")
+    await done(event, f"{E['ok']} {sc('unlock')} {mono(ltype)}\n"
+                      f"{E['dot']} {sc('bache')} ‣ {mono(', '.join(sorted(cur)) or 'kuch nahi')}{extra}", secs=6)
+
+
+@register_cmd("slock", group_only=True)
+async def cmd_slock(event, arg):
+    """.slock — super lock: har media type ek saath + sab members mute."""
+    key = str(event.chat_id)
+    LOCKS[key] = sorted(LOCK_TYPES)
+    save_json(F_LOCKS, LOCKS)
+    mok = mfail = 0
+    if event.is_group:
+        mok, mfail = await _lock_mute_all(event, True)
+    lines = [top(),
+             sub(f"{E['lock']} {sb('SUPER LOCK')} {sb('ON')}"),
+             sub(""),
+             sub(kv("types", str(len(LOCK_TYPES)), bullet=E["diamond"])),
+             sub(kv("muted", str(mok), bullet=E["shield"])),
+             sub(kv("failed", str(mfail), bullet=E["warn"])),
+             sub(kv("delay", f"{LOCK_DELAY}s", bullet=E["clock"])),
+             sub(""),
+             sub(FOOT),
+             f"╰{'─' * 30}╯"]
+    conf = await eor(event, "\n".join(lines))
+    await _del_after(conf, TMP_TTL)
 
 
 @register_cmd("locks", group_only=True)
 async def cmd_locks(event, arg):
     cur = LOCKS.get(str(event.chat_id))
     if not cur:
-        return await eor(event, "🔓 Is chat me koi lock nahi")
-    await eor(event, "🔒 𝐋𝐎𝐂𝐊𝐒\n━━━━━━━━━━━━━━━\n"
-                     + "\n".join(f"⟡ `{t}`" for t in cur))
+        return await eor(event, f"{E['ok']} {sc('is chat me koi lock nahi')}")
+    lines = [top(), sub(f"{E['lock']} {sc('active locks')}"), sub("")]
+    for t in cur:
+        lines.append(sub(f" {E['dot']} {mono(t)}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
+
+
+@register_cmd("tagall", group_only=True)
+async def cmd_tagall(event, arg):
+    global TAGALL_ACTIVE
+    msg_text = arg if arg else f"{E['spark']} {sc('attention')}"
+    st = await flash(event, f"{E['bolt']} {sc('tagging')}…", secs=30)
+    TAGALL_ACTIVE = True
+    mentions, sent = [], 0
+    async for user in bot.iter_participants(event.chat_id):
+        if not TAGALL_ACTIVE:
+            break
+        if user.bot or user.deleted:
+            continue
+        mentions.append(f"[{user.first_name}](tg://user?id={user.id})")
+        if len(mentions) == 5:
+            try:
+                await bot.send_message(event.chat_id, msg_text + "\n" + " ".join(mentions))
+                sent += 1
+            except FloodWaitError as fw:
+                await asyncio.sleep(fw.seconds)
+            except Exception:
+                pass
+            mentions = []
+            await asyncio.sleep(1.5)
+    if mentions:
+        try:
+            await bot.send_message(event.chat_id, msg_text + "\n" + " ".join(mentions))
+            sent += 1
+        except Exception:
+            pass
+    TAGALL_ACTIVE = False
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    conf = await eor(event, f"{E['bolt']} {sc('tagall done')} {E['arrow']} {mono(str(sent))} {sc('batches')}")
+    await _del_after(conf, TMP_TTL)
+
+
+@register_cmd("stop")
+async def cmd_stop(event, arg):
+    global TAGALL_ACTIVE
+    TAGALL_ACTIVE = False
+    await done(event, f"{E['no']} {sc('tagall stopped')}", secs=6)
+
+
+@register_cmd("banall", group_only=True, owner_only=True)
+async def cmd_banall(event, arg):
+    st = await flash(event, f"{E['skull']} {sc('banall chal raha hai')}…", secs=120)
+    ok = fail = 0
+    async for u in bot.iter_participants(event.chat_id):
+        if u.bot or u.id == OWNER_ID or u.id in ADMINS:
+            continue
+        try:
+            await bot.edit_permissions(event.chat_id, u.id, view_messages=False)
+            ok += 1
+        except FloodWaitError as fw:
+            await asyncio.sleep(min(fw.seconds, 20)); fail += 1
+        except Exception:
+            fail += 1
+        await asyncio.sleep(0.4)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    conf = await eor(event, f"{E['skull']} {sc('banall done')}\n"
+                            f" {E['ok']} {sc('banned')} ‣ {mono(str(ok))}\n"
+                            f" {E['no']} {sc('fail')}   ‣ {mono(str(fail))}")
+    await _del_after(conf, 6)
 
 
 # ══════════════════════════════════════════════════════════════
 #                     ɢʟᴏʙᴀʟ ʙᴀɴ / ᴍᴜᴛᴇ
 # ══════════════════════════════════════════════════════════════
+async def _gban_enforce(chat, uid):
+    try:
+        await bot.edit_permissions(chat, uid, view_messages=False)
+    except Exception:
+        pass
+
+
 @register_cmd("gban", owner_only=True)
 async def cmd_gban(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, f"❌ User nahi mila — `{PREFIX}gban <@user/id>` ya reply")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')} {E['arrow']} {mono('.gban @user')}")
     if is_admin(uid):
-        return await eor(event, "❌ Owner/admin ko gban nahi kar sakta")
+        return await eor(event, f"{E['no']} {sc('owner/admin ko gban nahi kar sakta')}")
     GBAN.add(uid)
     save_json(F_GBAN, sorted(GBAN))
-    st = await eor(event, f"☠️ GBAN `{uid}` — saare chats me ban kar raha hoon…")
+    st = await flash(event, f"{E['skull']} {sc('gban')} {mono(str(uid))}…", secs=90)
     ok = fail = 0
     async for d in bot.iter_dialogs():
         if not d.is_group:
@@ -2228,21 +3535,24 @@ async def cmd_gban(event, arg):
         except Exception:
             fail += 1
         await asyncio.sleep(0.25)
-    res = f"☠️ 𝐆𝐁𝐀𝐍\n━━━━━━━━━━━━━━━\n👤 `{uid}`\n✅ `{ok}` chats\n❌ `{fail}` fail"
-    try:
-        await st.edit(res)
-    except Exception:
-        await eor(event, res)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    await done(event, f"{E['skull']} {sc('gban')} {E['arrow']} {mono(str(uid))}\n"
+                      f" {E['ok']} {sc('chats')} ‣ {mono(str(ok))}\n"
+                      f" {E['no']} {sc('fail')}  ‣ {mono(str(fail))}", secs=10)
 
 
 @register_cmd("ungban", owner_only=True)
 async def cmd_ungban(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     GBAN.discard(uid)
     save_json(F_GBAN, sorted(GBAN))
-    st = await eor(event, "♻️ Un-gban kar raha hoon…")
+    st = await flash(event, f"{E['ok']} {sc('un-gban')}…", secs=90)
     ok = fail = 0
     async for d in bot.iter_dialogs():
         if not d.is_group:
@@ -2253,53 +3563,57 @@ async def cmd_ungban(event, arg):
         except Exception:
             fail += 1
         await asyncio.sleep(0.25)
-    res = f"♻️ 𝐔𝐍𝐆𝐁𝐀𝐍\n━━━━━━━━━━━━━━━\n👤 `{uid}`\n✅ `{ok}`\n❌ `{fail}`"
-    try:
-        await st.edit(res)
-    except Exception:
-        await eor(event, res)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    await done(event, f"{E['ok']} {sc('un-gban')} {mono(str(uid))} · {mono(str(ok))} {sc('ok')}", secs=10)
 
 
 @register_cmd("gbanlist", owner_only=True)
 async def cmd_gbanlist(event, arg):
     if not GBAN:
-        return await eor(event, "📭 Gban list khaali hai")
-    txt = f"☠️ 𝐆𝐁𝐀𝐍 𝐋𝐈𝐒𝐓 ({len(GBAN)})\n━━━━━━━━━━━━━━━\n"
+        return await eor(event, f"{E['note']} {sc('gban list khaali hai')}")
+    lines = [top(), sub(f"{E['skull']} {sc('gban list')} {mono(str(len(GBAN)))}"), sub("")]
     for i, u in enumerate(sorted(GBAN), 1):
-        txt += f"`{i}.` `{u}`\n"
-    await eor(event, txt)
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ {mono(str(u))}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
-@register_cmd("gmute", owner_only=True)
+@register_cmd("gmute", "gm", owner_only=True)
 async def cmd_gmute(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, f"❌ User nahi mila — `{PREFIX}gmute <@user/id>` ya reply")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')} {E['arrow']} {mono('.gmute @user')}")
     if is_admin(uid):
-        return await eor(event, "❌ Owner/admin ko gmute nahi kar sakta")
+        return await eor(event, f"{E['no']} {sc('owner/admin ko gmute nahi kar sakta')}")
     GMUTE.add(uid)
     save_json(F_GMUTE, sorted(GMUTE))
-    await eor(event, f"🔇 GMUTE → `{uid}`\nAb jahan bhi main admin hoon, uske messages delete honge")
+    await done(event, f"{E['lock']} {sc('gmute')} {E['arrow']} {mono(str(uid))}\n"
+                      f"{E['dot']} {sc('jahan main admin, uske msgs udd jayenge')}", secs=10)
 
 
 @register_cmd("ungmute", "gunmute", owner_only=True)
 async def cmd_ungmute(event, arg):
     uid, _ = await resolve_uid(event, arg)
     if not uid:
-        return await eor(event, "❌ User nahi mila")
+        return await eor(event, f"{E['no']} {sc('user nahi mila')}")
     GMUTE.discard(uid)
     save_json(F_GMUTE, sorted(GMUTE))
-    await eor(event, f"🔊 Un-gmute → `{uid}`")
+    await done(event, f"{E['ok']} {sc('un-gmute')} {E['arrow']} {mono(str(uid))}", secs=6)
 
 
 @register_cmd("gmutelist", owner_only=True)
 async def cmd_gmutelist(event, arg):
     if not GMUTE:
-        return await eor(event, "📭 Gmute list khaali hai")
-    txt = f"🔇 𝐆𝐌𝐔𝐓𝐄 𝐋𝐈𝐒𝐓 ({len(GMUTE)})\n━━━━━━━━━━━━━━━\n"
+        return await eor(event, f"{E['note']} {sc('gmute list khaali hai')}")
+    lines = [top(), sub(f"{E['lock']} {sc('gmute list')} {mono(str(len(GMUTE)))}"), sub("")]
     for i, u in enumerate(sorted(GMUTE), 1):
-        txt += f"`{i}.` `{u}`\n"
-    await eor(event, txt)
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ {mono(str(u))}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2308,97 +3622,95 @@ async def cmd_gmutelist(event, arg):
 async def raid_add(event, arg, bucket, label):
     targets = await get_targets(event, arg)
     if not targets:
-        return await eor(event, "❌ Target nahi mila — reply / @user / id")
+        return await eor(event, f"{E['no']} {sc('target nahi mila')} {E['arrow']} {sc('reply / @user / id')}")
     added, already = [], []
     for uid in targets:
-        if uid in bucket:
-            already.append(str(uid))
-        else:
-            bucket.add(uid)
-            added.append(str(uid))
+        (already if uid in bucket else added).append(str(uid))
+        bucket.add(uid)
     parts = []
     if added:
-        parts.append(f"▶️ {label} ON → `{', '.join(added)}`")
+        parts.append(f"{E['sword']} {sc(label + ' on')} {E['arrow']} {mono(', '.join(added))}")
     if already:
-        parts.append(f"⚠️ Pehle se → `{', '.join(already)}`")
-    await eor(event, "\n".join(parts) or "❌ Kuch nahi hua")
+        parts.append(f"{E['warn']} {sc('pehle se')} {mono(', '.join(already))}")
+    await done(event, "\n".join(parts) or f"{E['no']} {sc('kuch nahi hua')}", secs=8)
 
 
 async def raid_del(event, arg, bucket, label):
     targets = await get_targets(event, arg)
     if not targets:
-        return await eor(event, "❌ Target nahi mila")
+        return await eor(event, f"{E['no']} {sc('target nahi mila')}")
     removed = [str(u) for u in targets if u in bucket]
     bucket.difference_update(targets)
-    await eor(event, f"⏹ {label} OFF → `{', '.join(removed) or 'kuch nahi'}`")
+    await done(event, f"{E['no']} {sc(label + ' off')} {E['arrow']} {mono(', '.join(removed) or '—')}", secs=6)
 
 
 @register_cmd("reply")
 async def cmd_reply(event, arg):
-    await raid_add(event, arg, reply_users, "Reply raid")
+    await raid_add(event, arg, reply_users, "reply raid")
 
 
 @register_cmd("sreply")
 async def cmd_sreply(event, arg):
-    await raid_del(event, arg, reply_users, "Reply raid")
+    await raid_del(event, arg, reply_users, "reply raid")
 
 
 @register_cmd("rr")
 async def cmd_rr(event, arg):
-    await raid_add(event, arg, rr_users, "RR raid")
+    await raid_add(event, arg, rr_users, "rr raid")
 
 
 @register_cmd("srr")
 async def cmd_srr(event, arg):
-    await raid_del(event, arg, rr_users, "RR raid")
+    await raid_del(event, arg, rr_users, "rr raid")
 
 
 @register_cmd("flag")
 async def cmd_flag(event, arg):
-    await raid_add(event, arg, flag_users, "Flag raid")
+    await raid_add(event, arg, flag_users, "flag raid")
 
 
 @register_cmd("sflag")
 async def cmd_sflag(event, arg):
-    await raid_del(event, arg, flag_users, "Flag raid")
+    await raid_del(event, arg, flag_users, "flag raid")
 
 
 @register_cmd("hrr")
 async def cmd_hrr(event, arg):
-    await raid_add(event, arg, hrr_users, "Heart raid")
+    await raid_add(event, arg, hrr_users, "heart raid")
 
 
 @register_cmd("shrr")
 async def cmd_shrr(event, arg):
-    await raid_del(event, arg, hrr_users, "Heart raid")
+    await raid_del(event, arg, hrr_users, "heart raid")
 
 
 @register_cmd("replygod")
 async def cmd_replygod(event, arg):
-    await raid_add(event, arg, replygod_users, "ReplyGod")
+    await raid_add(event, arg, replygod_users, "replygod")
 
 
 @register_cmd("sgod")
 async def cmd_sgod(event, arg):
-    await raid_del(event, arg, replygod_users, "ReplyGod")
+    await raid_del(event, arg, replygod_users, "replygod")
 
 
 @register_cmd("replyyorichi")
 async def cmd_replyyorichi(event, arg):
     if not arg or len(arg.split()) < 2:
-        return await eor(event, f"❌ `{PREFIX}replyyorichi <text> <count>` (reply ke saath)")
+        return await eor(event, f"{E['no']} {mono('.replyyorichi <text> <count>')} {sc('(reply ke saath)')}")
     text, count = arg.rsplit(" ", 1)
     try:
         count = int(count)
     except Exception:
-        return await eor(event, "❌ Count number hona chahiye")
+        return await eor(event, f"{E['no']} {sc('count number hona chahiye')}")
     count = max(1, min(count, 100))
     targets = await get_targets(event, "")
     if not targets:
-        return await eor(event, "❌ Reply to karo")
+        return await eor(event, f"{E['no']} {sc('reply to karo')}")
     for uid in targets:
         replyyorichi_users[uid] = {"text": text, "count": count}
-    await eor(event, f"☄️ ReplyYorichi → `{', '.join(map(str, targets))}` × `{count}`")
+    await done(event, f"{E['comet']} {sc('yorichi')} {E['arrow']} "
+                      f"{mono(', '.join(map(str, targets)))} × {mono(str(count))}", secs=8)
 
 
 @register_cmd("syorichi")
@@ -2407,67 +3719,75 @@ async def cmd_syorichi(event, arg):
     removed = [str(u) for u in targets if u in replyyorichi_users]
     for u in targets:
         replyyorichi_users.pop(u, None)
-    await eor(event, f"⏹ Yorichi OFF → `{', '.join(removed) or 'kuch nahi'}`")
+    await done(event, f"{E['no']} {sc('yorichi off')} {E['arrow']} {mono(', '.join(removed) or '—')}", secs=6)
 
 
 @register_cmd("nikreply", "replynik")
 async def cmd_nikreply(event, arg):
-    """.nikreply <count> <text> — reply kiye gaye user ko N baar ye text bhejta hai"""
     if not event.is_reply:
-        return await eor(event, f"❌ Reply karke `{PREFIX}nikreply <count> <text>` likho")
+        return await eor(event, f"{E['no']} {sc('reply karke')} {mono('.nikreply <count> <text>')}")
     parts = (arg or "").split(maxsplit=1)
     if len(parts) < 2:
-        return await eor(event, f"❌ `{PREFIX}nikreply <count> <text>`\n"
-                                f"jaise `{PREFIX}nikreply 10 tu chup kar`")
+        return await eor(event, f"{E['no']} {mono('.nikreply <count> <text>')}\n"
+                                f"{E['dot']} {mono('.nikreply 10 tu chup kar')}")
     try:
         count = int(parts[0])
     except Exception:
-        return await eor(event, "❌ Count number hona chahiye")
+        return await eor(event, f"{E['no']} {sc('count number hona chahiye')}")
     count = max(1, min(count, 200))
     text = parts[1].strip()
     targets = await get_targets(event, "")
     if not targets:
-        return await eor(event, "❌ Target nahi mila")
+        return await eor(event, f"{E['no']} {sc('target nahi mila')}")
     for uid in targets:
         replyking_users[uid] = {"text": text, "count": count}
-    await eor(event, f"♛ NikReply ON → `{', '.join(map(str, targets))}`\n"
-                     f"🔢 Count `{count}` · 💬 `{text[:40]}`\n"
-                     f"⏹ Band → `{PREFIX}nik`")
+    await done(event, f"{E['crown']} {sc('nikreply on')} {E['arrow']} "
+                      f"{mono(', '.join(map(str, targets)))}\n"
+                      f"{E['dot']} {sc('count')} {mono(str(count))} · {text[:30]}\n"
+                      f"{E['dot']} {mono('.nik')} {sc('se band')}", secs=10)
 
 
 @register_cmd("nik", "nikstop")
 async def cmd_nik(event, arg):
-    cleared = len(reply_users) + len(rr_users) + len(flag_users) + \
-        len(hrr_users) + len(replygod_users) + len(replyking_users) + \
-        len(replyyorichi_users)
-    reply_users.clear(); rr_users.clear(); flag_users.clear()
-    hrr_users.clear(); replygod_users.clear()
-    replyking_users.clear(); replyyorichi_users.clear()
-    await eor(event, f"♛ Nik raid stop → `{cleared}` targets clear")
-
-
-@register_cmd("raidstopall")
-async def cmd_raidstopall(event, arg):
-    cleared = sum(len(s) for s in (reply_users, rr_users, flag_users,
-                                   hrr_users, replygod_users, ECHO_USERS))
-    for s in (reply_users, rr_users, flag_users, hrr_users,
-              replygod_users, ECHO_USERS):
+    cleared = (len(reply_users) + len(rr_users) + len(flag_users) + len(hrr_users)
+               + len(replygod_users) + len(replyking_users) + len(replyyorichi_users))
+    for s in (reply_users, rr_users, flag_users, hrr_users, replygod_users):
         s.clear()
-    replyyorichi_users.clear(); replyking_users.clear()
+    replyking_users.clear(); replyyorichi_users.clear()
+    await done(event, f"{E['crown']} {sc('nik raid stop')} {E['arrow']} {mono(str(cleared))} {sc('cleared')}", secs=6)
+
+
+@register_cmd("raidstopall", "stopall")
+async def cmd_raidstopall(event, arg):
+    cleared = sum(len(s) for s in (reply_users, rr_users, flag_users, hrr_users,
+                                   replygod_users, ECHO_USERS))
+    for s in (reply_users, rr_users, flag_users, hrr_users, replygod_users, ECHO_USERS):
+        s.clear()
+    replyyorichi_users.clear(); replyking_users.clear(); USER_REPLY.clear()
     for t in list(spray_tasks.values()):
         try:
             t.cancel()
         except Exception:
             pass
     spray_tasks.clear()
-    await eor(event, f"🧹 Sab raids band → `{cleared}` cleared")
+    global GPFP_TASK
+    if GPFP_TASK and not GPFP_TASK.done():
+        try:
+            GPFP_TASK.cancel()
+        except Exception:
+            pass
+    GPFP_TASK = None
+    GPFP_STATE["on"] = False
+    global TAGALL_ACTIVE
+    TAGALL_ACTIVE = False
+    await done(event, f"{E['no']} {sc('sab band')} {E['arrow']} {mono(str(cleared))} {sc('cleared')}", secs=8)
 
 
 @register_cmd("bomb")
 async def cmd_bomb(event, arg):
     targets = await get_targets(event, arg)
     if not targets and not event.is_reply:
-        msg = await eor(event, "💣 Loading…")
+        msg = await eor(event, f"{E['fire']} {sc('loading')}…")
         for f in ["💣·", "💣··", "💣···", "💥 BOOM", "🔥 Nik bomb 💥", "💀 Bhag bsdk 💀"]:
             try:
                 await msg.edit(f); await asyncio.sleep(0.6)
@@ -2476,7 +3796,7 @@ async def cmd_bomb(event, arg):
         return
     for uid in targets:
         reply_users.add(uid); rr_users.add(uid)
-    await eor(event, f"💣 Bomb → `{', '.join(map(str, targets))}`")
+    await done(event, f"{E['fire']} {sc('bomb')} {E['arrow']} {mono(', '.join(map(str, targets)))}", secs=6)
 
 
 @register_cmd("gali")
@@ -2486,7 +3806,7 @@ async def cmd_gali(event, arg):
     except Exception:
         count = 5
     count = max(1, min(count, 20))
-    await eor(event, f"🔥 Gali `{count}x`…")
+    st = await flash(event, f"{E['fire']} {sc('gali')} {mono(str(count))}x…", secs=30)
     for _ in range(count):
         try:
             await event.reply(random.choice(reply_list))
@@ -2495,11 +3815,16 @@ async def cmd_gali(event, arg):
         except Exception:
             pass
         await asyncio.sleep(0.8)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
 
 
 @register_cmd("love")
 async def cmd_love(event, arg):
-    msg = await eor(event, "❤️ Starting…")
+    msg = await eor(event, f"{E['heart']} {sc('starting')}…")
     if msg is None:
         return
     for f in ["❤️", "💖", "💝", "💞", "💓", "💗", "❤️‍🔥", "💘", "❤️ Nik loves you ❤️"]:
@@ -2512,64 +3837,89 @@ async def cmd_love(event, arg):
 # ══════════════════════════════════════════════════════════════
 #                          sᴘᴀᴍ
 # ══════════════════════════════════════════════════════════════
-@register_cmd("spray", owner_only=True)
-async def cmd_spray(event, arg):
-    if not arg:
-        return await eor(event, f"❌ `{PREFIX}spray <text>`")
-    chat = event.chat_id
-    if chat in spray_tasks and not spray_tasks[chat].done():
-        return await eor(event, "⚠️ Spray pehle se chal raha hai")
-
-    async def spray_loop():
+def _start_loop(chat, text, delay, media=None):
+    async def loop():
         try:
-            while True:
-                if chat not in spray_tasks:
-                    break
+            while chat in spray_tasks:
                 try:
-                    await bot.send_message(chat, arg[:4000])
+                    if media is not None:
+                        await bot.send_file(chat, media)
+                    else:
+                        await bot.send_message(chat, text)
                 except FloodWaitError as fw:
                     await asyncio.sleep(fw.seconds)
                 except RPCError:
                     break
                 except Exception:
                     await asyncio.sleep(2)
-                await asyncio.sleep(3)
+                await asyncio.sleep(delay)
         except asyncio.CancelledError:
             pass
         finally:
             spray_tasks.pop(chat, None)
-
-    spray_tasks[chat] = asyncio.create_task(spray_loop())
-    await eor(event, f"💣 Spray ON → `{arg[:40]}`\n⏹ `{PREFIX}dspray`")
+    spray_tasks[chat] = asyncio.create_task(loop())
 
 
-@register_cmd("dspray", owner_only=True)
+@register_cmd("spray", owner_only=True)
+async def cmd_spray(event, arg):
+    if not arg:
+        return await eor(event, f"{E['dot']} {mono('.spray <text>')}")
+    chat = event.chat_id
+    if chat in spray_tasks and not spray_tasks[chat].done():
+        return await eor(event, f"{E['warn']} {sc('spray pehle se chal raha hai')}")
+    _start_loop(chat, arg[:4000], 3)
+    await done(event, f"{E['comet']} {sc('spray on')} {E['arrow']} {arg[:40]}\n"
+                      f"{E['dot']} {mono('.dspray')} / {mono('.sspam')}", secs=8)
+
+
+@register_cmd("d")
+async def cmd_d(event, arg):
+    """.d <seconds> <text> — har N sec me repeat"""
+    parts = (arg or "").split(maxsplit=1)
+    if len(parts) < 2:
+        return await eor(event, f"{E['dot']} {mono('.d 2 hello')}\n"
+                                f"{E['dot']} {sc('delay 0.5 – 5 sec')}\n"
+                                f"{E['dot']} {mono('.sspam')} {sc('se band')}")
+    try:
+        delay = float(parts[0])
+    except Exception:
+        return await eor(event, f"{E['no']} {sc('delay number do')}")
+    delay = max(0.5, min(delay, 60.0))
+    chat = event.chat_id
+    if chat in spray_tasks and not spray_tasks[chat].done():
+        return await eor(event, f"{E['warn']} {sc('pehle se chal raha hai')} {E['arrow']} {mono('.sspam')}")
+    _start_loop(chat, parts[1][:4000], delay)
+    await done(event, f"{E['comet']} {sc('repeat on')} {E['arrow']} {mono(str(delay) + 's')}\n"
+                      f"{E['dot']} {parts[1][:40]}", secs=8)
+
+
+@register_cmd("dspray", "sspam", owner_only=True)
 async def cmd_dspray(event, arg):
     chat = event.chat_id
     if chat not in spray_tasks:
-        return await eor(event, "⚠️ Koi active spray nahi")
+        return await eor(event, f"{E['warn']} {sc('koi active loop nahi')}")
     try:
         spray_tasks[chat].cancel()
     except Exception:
         pass
     spray_tasks.pop(chat, None)
-    await eor(event, "🛑 Spray OFF")
+    await done(event, f"{E['no']} {sc('loop band')}", secs=6)
 
 
 @register_cmd("spam")
 async def cmd_spam(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}spam <count> <text>`")
+        return await eor(event, f"{E['dot']} {mono('.spam <count> <text>')}")
     parts = arg.split(maxsplit=1)
     if len(parts) < 2:
-        return await eor(event, "❌ Text bhi do")
+        return await eor(event, f"{E['no']} {sc('text bhi do')}")
     try:
         count = int(parts[0])
     except Exception:
-        return await eor(event, "❌ Count number hona chahiye")
+        return await eor(event, f"{E['no']} {sc('count number hona chahiye')}")
     count = max(1, min(count, 100))
     txt = parts[1]
-    await eor(event, f"💣 Spam `{count}x`…")
+    st = await flash(event, f"{E['comet']} {sc('spam')} {mono(str(count))}x…", secs=60)
     for _ in range(count):
         try:
             await event.reply(txt)
@@ -2578,19 +3928,24 @@ async def cmd_spam(event, arg):
         except Exception:
             pass
         await asyncio.sleep(0.7)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
 
 
 @register_cmd("mspam")
 async def cmd_mspam(event, arg):
     if not event.is_reply:
-        return await eor(event, "❌ Media pe reply karke `.mspam <n>`")
+        return await eor(event, f"{E['no']} {sc('media pe reply karke')} {mono('.mspam <n>')}")
     reply = await event.get_reply_message()
     try:
         count = int((arg or "5").split()[0])
     except Exception:
         count = 5
     count = max(1, min(count, 30))
-    await eor(event, f"📸 Media `{count}x`…")
+    st = await flash(event, f"{E['comet']} {sc('media')} {mono(str(count))}x…", secs=60)
     for _ in range(count):
         try:
             await bot.send_file(event.chat_id, reply.media)
@@ -2599,30 +3954,37 @@ async def cmd_mspam(event, arg):
         except Exception:
             pass
         await asyncio.sleep(1.2)
-    await eor(event, "✅ Media spam done")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
 
 
 @register_cmd("delayspam")
 async def cmd_delayspam(event, arg):
     parts = (arg or "").split(maxsplit=2)
     if len(parts) < 3:
-        return await eor(event, f"❌ `{PREFIX}delayspam <delay> <count> <text>`")
+        return await eor(event, f"{E['dot']} {mono('.delayspam <delay> <count> <text>')}")
     try:
         delay = float(parts[0]); count = int(parts[1])
     except Exception:
-        return await eor(event, "❌ Delay aur count number hone chahiye")
-    delay = max(0.5, delay)
-    count = max(1, min(count, 100))
-    txt = parts[2]
-    await eor(event, f"⏱ `{delay}s` × `{count}`")
+        return await eor(event, f"{E['no']} {sc('delay aur count number hone chahiye')}")
+    delay = max(0.5, delay); count = max(1, min(count, 100))
+    st = await flash(event, f"{E['clock']} {mono(str(delay) + 's')} × {mono(str(count))}", secs=120)
     for _ in range(count):
         try:
-            await event.reply(txt)
+            await event.reply(parts[2])
         except FloodWaitError as fw:
             await asyncio.sleep(fw.seconds)
         except Exception:
             pass
         await asyncio.sleep(delay)
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
 
 
 @register_cmd("purgeall", owner_only=True)
@@ -2631,58 +3993,19 @@ async def cmd_purgeall(event, arg):
         count = int((arg or "10").split()[0])
     except Exception:
         count = 10
-    count = max(1, min(count, 200))
-    await eor(event, f"🧹 Purging `{count}`…")
+    count = max(1, min(count, 300))
+    st = await flash(event, f"{E['trash']} {sc('purging')} {mono(str(count))}…", secs=60)
     ids = []
     async for m in bot.iter_messages(event.chat_id, limit=count):
         ids.append(m.id)
-    done = await _delete_ids(event.chat_id, ids)
-    conf = await eor(event, f"🧹 Deleted `{done}`")
-    await asyncio.sleep(3)
-    try:
-        await conf.delete()
-    except Exception:
-        pass
-
-
-@register_cmd("tagall", group_only=True)
-async def cmd_tagall(event, arg):
-    global TAGALL_ACTIVE
-    msg_text = arg if arg else "📢 Attention!"
-    await eor(event, "⚡ Tagging…")
-    TAGALL_ACTIVE = True
-    mentions = []
-    async for user in bot.iter_participants(event.chat_id):
-        if not TAGALL_ACTIVE:
-            break
-        if user.bot or user.deleted:
-            continue
-        mentions.append(f"[{user.first_name}](tg://user?id={user.id})")
-        if len(mentions) == 5:
-            try:
-                await bot.send_message(event.chat_id,
-                                       msg_text + "\n" + " ".join(mentions))
-            except FloodWaitError as fw:
-                await asyncio.sleep(fw.seconds)
-            except Exception:
-                pass
-            mentions = []
-            await asyncio.sleep(1.5)
-    if mentions:
+    done_n = await _delete_ids(event.chat_id, ids)
+    if st is not None:
         try:
-            await bot.send_message(event.chat_id,
-                                   msg_text + "\n" + " ".join(mentions))
+            await st.delete()
         except Exception:
             pass
-    TAGALL_ACTIVE = False
-    await eor(event, "✅ Tagall done")
-
-
-@register_cmd("stop")
-async def cmd_stop(event, arg):
-    global TAGALL_ACTIVE
-    TAGALL_ACTIVE = False
-    await eor(event, "🛑 Tagall stopped")
+    conf = await eor(event, f"{E['trash']} {sc('deleted')} {mono(str(done_n))}")
+    await _del_after(conf, TMP_TTL)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2707,8 +4030,7 @@ async def gc_fast_loop(chat_id):
                 await asyncio.sleep(2)
                 continue
             emoji = random.choice(GC_FAST_EMOJIS)
-            new_title = template.replace("{emoji}", emoji)
-            ok = await fast_title_edit(chat_id, new_title)
+            ok = await fast_title_edit(chat_id, template.replace("{emoji}", emoji))
             await asyncio.sleep(1 if ok else 5)
     except asyncio.CancelledError:
         return
@@ -2722,10 +4044,9 @@ async def cmd_fastgc(event, arg):
     if a.startswith("set "):
         template = a[4:].strip()
         if "{emoji}" not in template:
-            return await eor(event, "❌ Template me `{emoji}` likho\n"
-                                    f"👉 `{PREFIX}fastgc set Nik ♛ {{emoji}}`")
-        FASTGC_STATE.update({"active": True, "template": template,
-                             "chat_id": event.chat_id})
+            return await eor(event, f"{E['no']} {sc('template me')} {mono('{emoji}')} {sc('likho')}\n"
+                                    f"{E['dot']} {mono('.fastgc set Nik ♛ {emoji}')}")
+        FASTGC_STATE.update({"active": True, "template": template, "chat_id": event.chat_id})
         old = FASTGC_STATE.get("task")
         if old and not old.done():
             try:
@@ -2733,7 +4054,7 @@ async def cmd_fastgc(event, arg):
             except Exception:
                 pass
         FASTGC_STATE["task"] = asyncio.create_task(gc_fast_loop(event.chat_id))
-        return await eor(event, f"⚡ FastGC ON → `{template[:40]}`")
+        return await done(event, f"{E['bolt']} {sc('fastgc on')} {E['arrow']} {mono(template[:35])}", secs=8)
     if a == "stop":
         FASTGC_STATE["active"] = False
         FASTGC_STATE["template"] = None
@@ -2744,38 +4065,34 @@ async def cmd_fastgc(event, arg):
             except Exception:
                 pass
         FASTGC_STATE["task"] = None
-        return await eor(event, "🛑 FastGC OFF")
-    return await eor(event, f"❌ `{PREFIX}fastgc set <title {{emoji}}>` / `{PREFIX}fastgc stop`")
-
+        return await done(event, f"{E['no']} {sc('fastgc off')}", secs=6)
+    return await eor(event, f"{E['dot']} {mono('.fastgc set <title {{emoji}}>')}\n"
+                            f"{E['dot']} {mono('.fastgc stop')}")
 
 
 # ══════════════════════════════════════════════════════════════
-#                 ᴀғᴋ · ɢʜᴏsᴛ · ᴇᴄʜᴏ · ᴀᴜᴛᴏ-ʀᴇᴀᴄᴛ
+#                ᴀғᴋ · ɢʜᴏsᴛ · ᴇᴄʜᴏ · ʀᴇᴀᴄᴛ
 # ══════════════════════════════════════════════════════════════
 @register_cmd("afk")
 async def cmd_afk(event, arg):
-    AFK["active"] = True
-    AFK["reason"] = (arg or "AFK").strip()
-    AFK["since"] = time.time()
-    await eor(event, f"💤 AFK ON → `{AFK['reason']}`\n"
-                     f"Ab tag/PM pe auto-reply jayega · `{PREFIX}unafk` se band")
+    AFK.update({"active": True, "reason": (arg or "AFK").strip(), "since": time.time()})
+    await done(event, f"{E['moon']} {sc('afk on')} {E['arrow']} {mono(AFK['reason'])}\n"
+                      f"{E['dot']} {sc('tag/pm pe auto-reply')} · {mono('.unafk')}", secs=8)
 
 
 @register_cmd("unafk")
 async def cmd_unafk(event, arg):
-    AFK["active"] = False
-    AFK["reason"] = None
-    await eor(event, "✅ AFK OFF")
+    AFK.update({"active": False, "reason": None})
+    await done(event, f"{E['ok']} {sc('afk off')}", secs=6)
 
 
 @register_cmd("ghost")
 async def cmd_ghost(event, arg):
-    """.ghost on [seconds] — apne outgoing messages apne aap delete (default 30s)"""
     a = (arg or "").split()
     if not a:
-        state = "ON" if GHOST["on"] else "OFF"
-        return await eor(event, f"👻 Ghost → `{state}` (delay `{GHOST['delay']}s`)\n"
-                                f"👉 `{PREFIX}ghost on 30` / `{PREFIX}ghost off`")
+        return await eor(event, f"{E['ghost']} {sc('ghost')} {E['arrow']} "
+                                f"{mono('ON' if GHOST['on'] else 'OFF')} {sc('·')} {mono(str(GHOST['delay']) + 's')}\n"
+                                f"{E['dot']} {mono('.ghost on 30')} · {mono('.ghost off')}")
     if a[0].lower() in ("on", "enable", "start"):
         GHOST["on"] = True
         if len(a) > 1:
@@ -2783,46 +4100,51 @@ async def cmd_ghost(event, arg):
                 GHOST["delay"] = max(3, min(int(a[1]), 3600))
             except Exception:
                 pass
-        return await eor(event, f"👻 Ghost ON — apne messages `{GHOST['delay']}s` me delete honge")
+        return await done(event, f"{E['ghost']} {sc('ghost on')} {E['arrow']} "
+                                 f"{sc('apne msgs')} {mono(str(GHOST['delay']) + 's')} {sc('me udd jayenge')}", secs=8)
     if a[0].lower() in ("off", "disable", "stop"):
         GHOST["on"] = False
-        return await eor(event, "👻 Ghost OFF")
-    return await eor(event, f"❌ `{PREFIX}ghost on|off [seconds]`")
+        return await done(event, f"{E['ghost']} {sc('ghost off')}", secs=6)
+    return await eor(event, f"{E['dot']} {mono('.ghost on|off [seconds]')}")
 
 
 @register_cmd("echo")
 async def cmd_echo(event, arg):
     targets = await get_targets(event, arg)
     if not targets:
-        return await eor(event, "❌ Target nahi mila — reply / @user / id")
+        return await eor(event, f"{E['no']} {sc('target nahi mila')}")
     ECHO_USERS.update(targets)
-    await eor(event, f"🔁 Echo ON → `{', '.join(map(str, sorted(targets)))}`\n"
-                     f"Ab jo bhi ye bolega, main repeat karunga · `{PREFIX}unecho`")
+    await done(event, f"{E['note']} {sc('echo on')} {E['arrow']} "
+                      f"{mono(', '.join(map(str, sorted(targets))))}\n"
+                      f"{E['dot']} {mono('.unecho')}", secs=8)
 
 
 @register_cmd("unecho")
 async def cmd_unecho(event, arg):
     targets = await get_targets(event, arg)
     if not targets:
-        return await eor(event, "❌ Target nahi mila")
+        return await eor(event, f"{E['no']} {sc('target nahi mila')}")
     ECHO_USERS.difference_update(targets)
-    await eor(event, f"🔕 Echo OFF → `{', '.join(map(str, sorted(targets)))}`")
+    await done(event, f"{E['no']} {sc('echo off')} {E['arrow']} "
+                      f"{mono(', '.join(map(str, sorted(targets))))}", secs=6)
 
 
-@register_cmd("ar")
+@register_cmd("ar", "art")
 async def cmd_ar(event, arg):
     global AUTO_REACT_EMOJI
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}ar <emoji>` — apne har message pe auto-react")
+        return await eor(event, f"{E['spark']} {sc('auto-react')} {E['arrow']} "
+                                f"{mono(AUTO_REACT_EMOJI or 'off')}\n"
+                                f"{E['dot']} {mono('.ar <emoji>')} · {mono('.sart')}")
     AUTO_REACT_EMOJI = arg.strip()
-    await eor(event, f"✨ Auto-react ON → {AUTO_REACT_EMOJI}")
+    await done(event, f"{E['spark']} {sc('auto-react on')} {E['arrow']} {AUTO_REACT_EMOJI}", secs=6)
 
 
-@register_cmd("sar")
+@register_cmd("sar", "sart")
 async def cmd_sar(event, arg):
     global AUTO_REACT_EMOJI
     AUTO_REACT_EMOJI = None
-    await eor(event, "⏹ Auto-react OFF")
+    await done(event, f"{E['no']} {sc('auto-react off')}", secs=6)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2831,110 +4153,112 @@ async def cmd_sar(event, arg):
 @register_cmd("tts")
 async def cmd_tts(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}tts <text>`")
-    await eor(event, "🎙 Ban raha hoon…")
+        return await eor(event, f"{E['dot']} {mono('.tts <text>')}")
+    st = await flash(event, f"{E['note']} {sc('audio bana raha hoon')}…", secs=30)
     fname = os.path.join(TEMP_PATH, f"tts_{int(time.time())}.mp3")
     try:
         gTTS(text=arg[:3000], lang="hi", slow=False).save(fname)
     except Exception:
-        return await eor(event, "❌ TTS fail (network?)")
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        return await eor(event, f"{E['no']} {sc('tts fail (network?)')}")
     try:
-        await bot.send_file(event.chat_id, fname, caption="🎙 TTS ♛")
+        await bot.send_file(event.chat_id, fname, caption=f"{E['note']} {sc('tts')}\n{FOOT}")
         try:
             await event.delete()
         except Exception:
             pass
     except Exception as e:
-        await eor(event, f"❌ `{str(e)[:60]}`")
+        await eor(event, f"{E['no']} {mono(str(e)[:60])}")
     finally:
         try:
             os.remove(fname)
         except Exception:
             pass
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
 
 
 @register_cmd("qrcode")
 async def cmd_qrcode(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}qrcode <text>`")
-    await eor(event, "⚡ QR bana raha hoon…")
+        return await eor(event, f"{E['dot']} {mono('.qrcode <text>')}")
+    st = await flash(event, f"{E['tool']} {sc('qr bana raha hoon')}…", secs=20)
     fname = os.path.join(TEMP_PATH, f"qr_{int(time.time())}.png")
     try:
         qrcode.make(arg[:2000]).save(fname)
-        await bot.send_file(event.chat_id, fname, caption="🔳 QR ♛")
+        await bot.send_file(event.chat_id, fname, caption=f"{E['tool']} {sc('qr')}\n{FOOT}")
         try:
             await event.delete()
         except Exception:
             pass
     except Exception as e:
-        await eor(event, f"❌ `{str(e)[:60]}`")
+        await eor(event, f"{E['no']} {mono(str(e)[:60])}")
     finally:
         try:
             os.remove(fname)
         except Exception:
             pass
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
 
 
 @register_cmd("fancy")
 async def cmd_fancy(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}fancy <text>`")
+        return await eor(event, f"{E['dot']} {mono('.fancy <text>')}")
     t = arg[:1500]
-    styles = [
-        f"★彡 {t} 彡★", f"『 {t} 』", f"✦ {t} ✦", f"☾ {t} ☽",
-        f"➳ {t} ➳", f"⚡ {t} ⚡", f"❖ {t} ❖", f"⫷ {t} ⫸",
-        f"♛ {t} ♛", f"✧･ﾟ: *✧ {t} ✧*:･ﾟ✧", f"꧁ {t} ꧂",
-        f"░▒▓ {t} ▓▒░", f"➶➶ {t} ➷➷", f"✿ {t} ✿", f"⟪ {t} ⟫",
-        f"⌁ {t} ⌁", f"🜲 {t} 🜲", f"⟡ {t} ⟡", f"⬢ {t} ⬢",
-    ]
-    await eor(event, "✨ 𝐅𝐀𝐍𝐂𝐘\n━━━━━━━━━━━━━━━\n" + "\n".join(styles))
+    styles = [f"★彡 {t} 彡★", f"『 {t} 』", f"✦ {t} ✦", f"☾ {t} ☽", f"➳ {t} ➳",
+              f"⚡ {t} ⚡", f"❖ {t} ❖", f"⫷ {t} ⫸", f"♛ {t} ♛",
+              f"✧･ﾟ: *✧ {t} ✧*:･ﾟ✧", f"꧁ {t} ꧂", f"░▒▓ {t} ▓▒░",
+              f"➶➶ {t} ➷➷", f"✿ {t} ✿", f"⟪ {t} ⟫", f"⌁ {t} ⌁",
+              f"🜲 {t} 🜲", f"⟡ {t} ⟡", f"⬢ {t} ⬢"]
+    await eor(event, f"{E['spark']} {sc('fancy styles')}\n{'─' * 22}\n" + "\n".join(styles))
 
 
 @register_cmd("style")
 async def cmd_style(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}style <text>`")
+        return await eor(event, f"{E['dot']} {mono('.style <text>')}")
     t = arg[:1500]
-    script = (t.replace('a', '𝒶').replace('b', '𝒷').replace('c', '𝒸')
-              .replace('d', '𝒹').replace('e', '𝑒').replace('f', '𝒻')
-              .replace('g', '𝑔').replace('h', '𝒽').replace('i', '𝒾')
-              .replace('j', '𝒿').replace('k', '𝓀').replace('l', '𝓁')
-              .replace('m', '𝓂').replace('n', '𝓃').replace('o', '𝑜')
-              .replace('p', '𝓅').replace('q', '𝓆').replace('r', '𝓇')
-              .replace('s', '𝓈').replace('t', '𝓉').replace('u', '𝓊')
-              .replace('v', '𝓋').replace('w', '𝓌').replace('x', '𝓍')
-              .replace('y', '𝓎').replace('z', '𝓏'))
-    await eor(event, f"🎨 𝐒𝐓𝐘𝐋𝐄\n━━━━━━━━━━━━━━━\n"
-                     f"𝒻𝒶𝓃𝒸𝓎 → {script}\n"
-                     f"**Bold** → **{t}**\n"
-                     f"__Italic__ → __{t}__\n"
-                     f"`Mono` → `{t}`")
+    await eor(event, f"{E['spark']} {sc('style')}\n{'─' * 22}\n"
+                     f"{scr(t)}\n{sb(t)}\n{scrb(t)}\n{bs(t)}\n{its(t)}\n{sbi(t)}\n{mono(t)}\n{dbl(t)}\n{sc(t)}")
 
 
 @register_cmd("emoji")
 async def cmd_emoji(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}emoji <text>`")
-    pool = ["🔥", "❤️", "✨", "⚡", "💥", "🌟", "💫", "🎯", "💎", "🦋",
-            "🌈", "🧨", "🎆", "👑", "🌸", "🪄", "🌊", "❄️", "🍁", "🌙",
-            "☀️", "💣", "🎵", "🧿", "✦", "❖", "⟡", "♛", "⚜️", "🔱"]
+        return await eor(event, f"{E['dot']} {mono('.emoji <text>')}")
+    pool = ["✦", "❖", "⟡", "♛", "⚜️", "🔱", "💠", "🪬", "🧿", "⛓️", "🗝️",
+            "🧭", "🛰️", "🧬", "🪐", "🌠", "🫧", "🕸️", "🪞", "🗡️", "🛡️",
+            "🌩️", "🜛", "✺", "⟐", "⬡", "⌬", "❂", "✵", "🌌"]
     deco = "".join(random.choice(pool) for _ in range(8))
-    await eor(event, f"✨ 𝐄𝐌𝐎𝐉𝐈\n━━━━━━━━━━━━━━━\n{arg[:1500]} {deco}")
+    await eor(event, f"{deco}\n{arg[:1500]}\n{deco}")
 
 
 @register_cmd("calc")
 async def cmd_calc(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}calc <expression>`")
+        return await eor(event, f"{E['dot']} {mono('.calc <expression>')}")
     expr = arg.replace(" ", "")
     allowed = set("0123456789+-*/().%")
     if any(c not in allowed for c in expr):
-        return await eor(event, "❌ Sirf 0-9 + - * / ( ) . % allowed")
+        return await eor(event, f"{E['no']} {sc('sirf')} {mono('0-9 + - * / ( ) . %')}")
     try:
         res = eval(expr, {"__builtins__": None}, {})
     except Exception:
-        return await eor(event, "❌ Invalid expression")
-    await eor(event, f"🧮 𝐂𝐀𝐋𝐂\n━━━━━━━━━━━━━━━\n📥 `{expr}`\n📤 `{res}`")
+        return await eor(event, f"{E['no']} {sc('invalid expression')}")
+    await eor(event, f"{E['tool']} {sc('calc')}\n{'─' * 22}\n"
+                     f"{E['dot']} {mono(expr)}\n{E['arrow']} {mono(str(res))}")
 
 
 def _http_json(url, timeout=8):
@@ -2947,108 +4271,111 @@ def _http_json(url, timeout=8):
 @register_cmd("weather")
 async def cmd_weather(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}weather <city>`")
-    await eor(event, "🌦 Fetching…")
+        return await eor(event, f"{E['dot']} {mono('.weather <city>')}")
+    st = await flash(event, f"{E['wave']} {sc('fetching')}…", secs=15)
     geo = _http_json(f"https://geocoding-api.open-meteo.com/v1/search?name={arg}&count=1")
     if not geo or not geo.get("results"):
-        return await eor(event, "❌ City nahi mili")
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        return await eor(event, f"{E['no']} {sc('city nahi mili')}")
     r = geo["results"][0]
     w = _http_json(f"https://api.open-meteo.com/v1/forecast?latitude={r.get('latitude')}"
                    f"&longitude={r.get('longitude')}&current_weather=true")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
     if not w or not w.get("current_weather"):
-        return await eor(event, "❌ Weather data nahi mila")
+        return await eor(event, f"{E['no']} {sc('weather data nahi mila')}")
     cw = w["current_weather"]
-    await eor(event, f"🌦 𝐖𝐄𝐀𝐓𝐇𝐄𝐑\n━━━━━━━━━━━━━━━\n"
-                     f"📍 `{r.get('name')}`\n"
-                     f"🌡 `{cw.get('temperature')}°C`\n"
-                     f"💨 `{cw.get('windspeed')} km/h`")
+    await eor(event, "\n".join([top(), sub(f"{E['wave']} {sc('weather')}"), sub(""),
+                                sub(f" {E['dot']} {sc('city')} ‣ {r.get('name')}"),
+                                sub(f" {E['dot']} {sc('temp')} ‣ {mono(str(cw.get('temperature')) + '°C')}"),
+                                sub(f" {E['dot']} {sc('wind')} ‣ {mono(str(cw.get('windspeed')) + ' km/h')}"),
+                                sub(""), sub(FOOT), f"╰{'─' * 30}╯"]))
 
 
 @register_cmd("ip")
 async def cmd_ip(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}ip <ip>`")
-    await eor(event, "🌍 Looking up…")
+        return await eor(event, f"{E['dot']} {mono('.ip <ip>')}")
+    st = await flash(event, f"{E['globe']} {sc('lookup')}…", secs=15)
     d = _http_json(f"http://ip-api.com/json/{arg}")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
     if not d or d.get("status") != "success":
-        return await eor(event, "❌ Invalid IP")
-    await eor(event, f"🌍 𝐈𝐏 𝐈𝐍𝐅𝐎\n━━━━━━━━━━━━━━━\n"
-                     f"📡 `{d.get('query')}`\n"
-                     f"🌐 `{d.get('country')}`\n"
-                     f"🏙 `{d.get('city')}`\n"
-                     f"📍 `{d.get('isp')}`")
+        return await eor(event, f"{E['no']} {sc('invalid ip')}")
+    await eor(event, "\n".join([top(), sub(f"{E['globe']} {sc('ip info')}"), sub(""),
+                                sub(f" {E['dot']} {sc('ip')}   ‣ {mono(str(d.get('query')))}"),
+                                sub(f" {E['dot']} {sc('country')} ‣ {d.get('country')}"),
+                                sub(f" {E['dot']} {sc('city')} ‣ {d.get('city')}"),
+                                sub(f" {E['dot']} {sc('isp')} ‣ {d.get('isp')}"),
+                                sub(""), sub(FOOT), f"╰{'─' * 30}╯"]))
 
 
 @register_cmd("short")
 async def cmd_short(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}short <url>`")
+        return await eor(event, f"{E['dot']} {mono('.short <url>')}")
     if not arg.startswith(("http://", "https://")):
         arg = "http://" + arg
-    await eor(event, "🔗 Shortening…")
+    st = await flash(event, f"{E['chain']} {sc('shortening')}…", secs=15)
     try:
         short_url = requests.get(
             f"http://tinyurl.com/api-create.php?url={requests.utils.requote_uri(arg)}",
             timeout=8).text.strip()
     except Exception:
-        return await eor(event, "❌ Short fail (network?)")
-    await eor(event, f"🔗 𝐒𝐇𝐎𝐑𝐓\n━━━━━━━━━━━━━━━\n`{short_url}`")
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        return await eor(event, f"{E['no']} {sc('short fail (network?)')}")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    await eor(event, f"{E['chain']} {sc('short url')}\n{'─' * 22}\n{mono(short_url)}")
 
 
 @register_cmd("music")
 async def cmd_music(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}music <song>`")
+        return await eor(event, f"{E['dot']} {mono('.music <song>')}")
     query = arg.strip()
     frames = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▰▰▰▰▱", "▰▰▰▰▰"]
-    status = await eor(event, f"🎵 `{query}`\n\n`{frames[0]}`")
+    status = await eor(event, f"{E['note']} {mono(query)}\n\n{mono(frames[0])}")
     stop = asyncio.Event()
-
-    async def loader():
-        i = 0
-        while not stop.is_set():
-            try:
-                await status.edit(f"🎵 `{query}`\n\n`{frames[i % 5]}`")
-            except Exception:
-                pass
-            i += 1
-            await asyncio.sleep(1)
-
-    lt = asyncio.create_task(loader())
+    lt = asyncio.create_task(_music_loader(status, query, frames, stop))
 
     async def worker():
         try:
-            import yt_dlp
-            loop = asyncio.get_event_loop()
-            opts = {"format": "bestaudio[abr<=128]/bestaudio",
-                    "outtmpl": os.path.join(TEMP_PATH, "vn_%(id)s.%(ext)s"),
-                    "quiet": True, "default_search": "ytsearch1",
-                    "noplaylist": True, "retries": 2}
-
-            def dl():
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    return ydl.extract_info(query, download=True)
-
-            info = await loop.run_in_executor(None, dl)
-            if "entries" in info:
-                info = info["entries"][0]
-            vid = info.get("id")
-            title = info.get("title") or query
-            files = glob.glob(os.path.join(TEMP_PATH, f"vn_{vid}.*"))
-            if not files:
+            path, info = await yt_download(query, audio=True)
+            if not path:
                 raise Exception("download fail")
-            src = files[0]
+            title = str((info or {}).get("title") or query)
             clean = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:40]
             new = os.path.join(TEMP_PATH, f"{clean}.ogg")
             try:
-                os.rename(src, new)
+                os.rename(path, new)
             except Exception:
-                new = src
+                new = path
             stop.set()
             lt.cancel()
-            await eor(event, f"🎙 Sending → `{clean}`")
+            try:
+                await status.delete()
+            except Exception:
+                pass
             await bot.send_file(event.chat_id, new, voice_note=True,
-                                caption=f"🎵 {clean}")
+                                caption=f"{E['note']} {clean}\n{E['spark']} {sc('powered by')} {OWNER_TAG}")
             try:
                 os.remove(new)
             except Exception:
@@ -3060,9 +4387,19 @@ async def cmd_music(event, arg):
         except Exception as e:
             stop.set()
             lt.cancel()
-            await eor(event, f"❌ Music → `{str(e)[:60]}`")
-
+            await eor(event, f"{E['no']} {sc('music fail')} {E['arrow']} {mono(str(e)[:60])}")
     asyncio.create_task(worker())
+
+
+async def _music_loader(status, query, frames, stop):
+    i = 0
+    while not stop.is_set():
+        try:
+            await status.edit(f"{E['note']} {mono(query)}\n\n{mono(frames[i % 5])}")
+        except Exception:
+            pass
+        i += 1
+        await asyncio.sleep(1)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3071,72 +4408,77 @@ async def cmd_music(event, arg):
 @register_cmd("notesadd")
 async def cmd_notesadd(event, arg):
     if not arg:
-        return await eor(event, f"❌ `{PREFIX}notesadd <text>`")
+        return await eor(event, f"{E['dot']} {mono('.notesadd <text>')}")
     NOTES[int(event.chat_id)] = arg.strip()
     save_json(F_NOTES, {str(k): v for k, v in NOTES.items()})
-    await eor(event, f"📝 Note saved ({len(arg)} chars)")
+    await done(event, f"{E['key']} {sc('note saved')} {mono(str(len(arg)))} {sc('chars')}", secs=6)
 
 
 @register_cmd("noteslist")
 async def cmd_noteslist(event, arg):
     n = NOTES.get(int(event.chat_id))
     if not n:
-        return await eor(event, "📭 Is chat ka koi note nahi")
-    await eor(event, f"📝 𝐍𝐎𝐓𝐄\n━━━━━━━━━━━━━━━\n{n[:3000]}")
+        return await eor(event, f"{E['note']} {sc('koi note nahi')}")
+    await eor(event, f"{E['key']} {sc('note')}\n{'─' * 22}\n{n[:3000]}")
 
 
 @register_cmd("notesdelete")
 async def cmd_notesdelete(event, arg):
     if NOTES.pop(int(event.chat_id), None) is None:
-        return await eor(event, "⚠️ Note tha hi nahi")
+        return await eor(event, f"{E['warn']} {sc('note tha hi nahi')}")
     save_json(F_NOTES, {str(k): v for k, v in NOTES.items()})
-    await eor(event, "🗑 Note delete kar diya")
+    await done(event, f"{E['trash']} {sc('note delete')}", secs=6)
 
 
 @register_cmd("banner")
 async def cmd_banner(event, arg):
     global MENU_BANNER
     if not event.is_reply:
-        return await eor(event, "❌ Photo/video pe reply karke `.banner`")
+        return await eor(event, f"{E['no']} {sc('photo/video pe reply karke')} {mono('.banner')}")
     r = await event.get_reply_message()
     if not r.media:
-        return await eor(event, "❌ Sirf photo/video")
-    await eor(event, "⚡ Banner set kar raha hoon…")
+        return await eor(event, f"{E['no']} {sc('sirf photo/video')}")
+    st = await flash(event, f"{E['wand']} {sc('banner set')}…", secs=20)
     try:
         saved = await r.forward_to("me")
     except Exception:
         try:
             raw = await r.download_media(file=bytes)
             if not raw:
-                return await eor(event, "❌ Download fail")
-            bio = BytesIO(raw)
-            bio.name = "banner.jpg"
+                return await eor(event, f"{E['no']} {sc('download fail')}")
+            bio = BytesIO(raw); bio.name = "banner.jpg"
             saved = await bot.send_file("me", bio)
         except Exception as e:
-            return await eor(event, f"❌ `{str(e)[:60]}`")
+            return await eor(event, f"{E['no']} {mono(str(e)[:60])}")
     MENU_BANNER = [int(saved.chat_id), int(saved.id)]
     save_json(F_BANNER, MENU_BANNER)
-    await eor(event, f"🖼 Banner set → id `{saved.id}`\n`.menu` ke saath aayega")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    await done(event, f"{E['wand']} {sc('banner set')} {E['arrow']} {mono(str(saved.id))}\n"
+                      f"{E['dot']} {mono('.menu')} {sc('ke saath aayega')}", secs=8)
 
 
 @register_cmd("rembanner")
 async def cmd_rembanner(event, arg):
     global MENU_BANNER
     if not MENU_BANNER:
-        return await eor(event, "⚠️ Banner set hai hi nahi")
+        return await eor(event, f"{E['warn']} {sc('banner set hai hi nahi')}")
     try:
         await bot.delete_messages(MENU_BANNER[0], [MENU_BANNER[1]])
     except Exception:
         pass
     MENU_BANNER = None
     save_json(F_BANNER, None)
-    await eor(event, "🗑 Banner hata diya")
+    await done(event, f"{E['trash']} {sc('banner hata diya')}", secs=6)
 
 
 # ══════════════════════════════════════════════════════════════
 #                          ᴄʟᴏɴᴇ
 # ══════════════════════════════════════════════════════════════
-@register_cmd("copy", owner_only=True)
+@register_cmd("copy", "cp", owner_only=True)
 async def cmd_copy(event, arg):
     global CLONE_ACTIVE, LAST_CLONE_ID
     target = None
@@ -3153,14 +4495,13 @@ async def cmd_copy(event, arg):
         except Exception:
             pass
     if target is None:
-        return await eor(event, "❌ Reply / @user / id do")
+        return await eor(event, f"{E['no']} {sc('reply / @user / id do')}")
     me = await bot.get_me()
     if target.id == me.id:
-        return await eor(event, "⚠️ Khud ko clone? nope")
+        return await eor(event, f"{E['warn']} {sc('khud ko clone? nope')}")
     if CLONE_ACTIVE and LAST_CLONE_ID == target.id:
-        return await eor(event, "⚠️ Pehle se cloned hai")
-
-    await eor(event, "⚡ Clone init…")
+        return await eor(event, f"{E['warn']} {sc('pehle se cloned hai')}")
+    st = await flash(event, f"{E['wand']} {sc('clone init')}…", secs=30)
     if not CLONE_ACTIVE:
         try:
             full = await bot(functions.users.GetFullUserRequest(me.id))
@@ -3178,13 +4519,12 @@ async def cmd_copy(event, arg):
             CLONE_ACTIVE = True
         except Exception as e:
             print(f"[clone backup] {e}")
-
     try:
         await bot(functions.account.UpdateProfileRequest(
-            first_name=target.first_name or "", last_name=target.last_name or ""))
+            first_name=getattr(target, "first_name", "") or "",
+            last_name=getattr(target, "last_name", "") or ""))
     except FloodWaitError as fw:
         await asyncio.sleep(fw.seconds)
-
     try:
         tf = await bot(functions.users.GetFullUserRequest(target.id))
         bio = (tf.full_user.about or "").strip()[:70]
@@ -3193,7 +4533,6 @@ async def cmd_copy(event, arg):
         await bot(functions.account.UpdateProfileRequest(about=bio))
     except Exception:
         pass
-
     try:
         raw = await bot.download_profile_photo(target, file=bytes, download_big=True)
         if raw:
@@ -3210,17 +4549,22 @@ async def cmd_copy(event, arg):
         await asyncio.sleep(fw.seconds)
     except Exception:
         pass
-
     LAST_CLONE_ID = target.id
-    await eor(event, "✅ Clone complete ♛\n`.normal` se wapas aao")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    await done(event, f"{E['wand']} {sc('clone complete')} {E['heart']}\n"
+                      f"{E['dot']} {mono('.normal')} {sc('se wapas aao')}", secs=8)
 
 
-@register_cmd("normal", owner_only=True)
+@register_cmd("normal", "nrml", owner_only=True)
 async def cmd_normal(event, arg):
     global CLONE_ACTIVE, LAST_CLONE_ID
     if not CLONE_ACTIVE:
-        return await eor(event, "⚠️ Koi clone active nahi")
-    await eor(event, "⚡ Restore init…")
+        return await eor(event, f"{E['warn']} {sc('koi clone active nahi')}")
+    st = await flash(event, f"{E['wand']} {sc('restore init')}…", secs=30)
     try:
         await bot(functions.account.UpdateProfileRequest(
             first_name=CLONE_DATA.get("name") or "",
@@ -3230,8 +4574,7 @@ async def cmd_normal(event, arg):
     try:
         await bot(functions.account.UpdateProfileRequest(about=""))
         await asyncio.sleep(0.7)
-        await bot(functions.account.UpdateProfileRequest(
-            about=CLONE_DATA.get("bio") or ""))
+        await bot(functions.account.UpdateProfileRequest(about=CLONE_DATA.get("bio") or ""))
     except Exception:
         pass
     try:
@@ -3247,73 +4590,162 @@ async def cmd_normal(event, arg):
     CLONE_ACTIVE = False
     LAST_CLONE_ID = None
     CLONE_DATA.clear()
-    await eor(event, "✅ Original restore ho gaya ♛")
-
-
-# ══════════════════════════════════════════════════════════════
-#                          ᴀᴅᴍɪɴ
-# ══════════════════════════════════════════════════════════════
-@register_cmd("addadmin", owner_only=True)
-async def cmd_addadmin(event, arg):
-    targets = await get_targets(event, arg)
-    if not targets:
-        return await eor(event, "❌ Target nahi mila")
-    added, already = [], []
-    for uid in targets:
-        if uid == OWNER_ID:
-            continue
-        if uid in ADMINS:
-            already.append(str(uid))
-        else:
-            ADMINS.add(uid); added.append(str(uid))
-    save_json(F_ADMINS, sorted(ADMINS))
-    parts = []
-    if added:
-        parts.append(f"✅ Admin added → `{', '.join(added)}`")
-    if already:
-        parts.append(f"⚠️ Pehle se → `{', '.join(already)}`")
-    await eor(event, "\n".join(parts) or "❌ Kuch nahi hua")
-
-
-@register_cmd("deladmin", owner_only=True)
-async def cmd_deladmin(event, arg):
-    targets = await get_targets(event, arg)
-    if not targets:
-        return await eor(event, "❌ Target nahi mila")
-    removed = [str(u) for u in targets if u in ADMINS]
-    ADMINS.difference_update(targets)
-    save_json(F_ADMINS, sorted(ADMINS))
-    await eor(event, f"🗑 Admin removed → `{', '.join(removed) or 'kuch nahi'}`")
-
-
-@register_cmd("admins", owner_only=True)
-async def cmd_admins(event, arg):
-    lst = "\n".join(f"⟡ `{a}`" for a in sorted(ADMINS)) or "⚠️ Koi extra admin nahi"
-    await eor(event, f"👑 𝐀𝐃𝐌𝐈𝐍𝐒\n━━━━━━━━━━━━━━━\n"
-                     f"👑 Owner `{OWNER_ID}`\n{lst}\n\n📊 Total `{len(ADMINS)}`")
-
-
-@register_cmd("addbots", group_only=True, owner_only=True)
-async def cmd_addbots(event, arg):
-    try:
-        n = int((arg or "5").split()[0])
-    except Exception:
-        n = 5
-    n = max(1, min(n, len(ADD_BOTS_LIST)))
-    await eor(event, f"🤖 `{n}` bots add kar raha hoon…")
-    ok = fail = 0
-    for b in ADD_BOTS_LIST[:n]:
+    if st is not None:
         try:
-            await bot(functions.channels.InviteToChannelRequest(
-                channel=event.chat_id, users=[b]))
-            ok += 1
-        except FloodWaitError as fw:
-            await asyncio.sleep(fw.seconds)
-            fail += 1
+            await st.delete()
         except Exception:
-            fail += 1
-        await asyncio.sleep(1)
-    await eor(event, f"🤖 Bots added `{ok}` · fail `{fail}`")
+            pass
+    await done(event, f"{E['ok']} {sc('original restore ho gaya')} {E['heart']}", secs=8)
+
+
+# ══════════════════════════════════════════════════════════════
+#                    sᴜʙ-ᴜsᴇʀʙᴏᴛ (multi session)
+# ══════════════════════════════════════════════════════════════
+@register_cmd("addbot", owner_only=True)
+async def cmd_addbot(event, arg):
+    """.addbot +9199xxxx — naya userbot session login shuru"""
+    phone = (arg or "").strip()
+    if not phone.startswith("+"):
+        return await eor(event, f"{E['dot']} {mono('.addbot +919999999999')}\n"
+                                f"{E['dot']} {sc('phir')} {mono('.c <code>')} "
+                                f"{sc('aur zarurat pade to')} {mono('.p <2fa>')}")
+    if phone in SUBBOTS:
+        return await eor(event, f"{E['warn']} {sc('ye pehle se connected hai')}")
+    st = await flash(event, f"{E['bot']} {sc('code bhej raha hoon')}…", secs=20)
+    try:
+        client = TelegramClient(f"sub_{phone.lstrip('+')}", API_ID, API_HASH)
+        await client.connect()
+        res = await client(functions.auth.SendCodeRequest(
+            phone, API_ID, API_HASH, types.CodeSettings()))
+        PENDING[phone] = {"client": client, "hash": res.phone_code_hash}
+    except Exception as e:
+        if st is not None:
+            try:
+                await st.delete()
+            except Exception:
+                pass
+        return await eor(event, f"{E['no']} {sc('code nahi gaya')} {E['arrow']} {mono(str(e)[:60])}")
+    if st is not None:
+        try:
+            await st.delete()
+        except Exception:
+            pass
+    conf = await eor(event, f"{E['bot']} {sc('code bhej diya')} {mono(phone)}\n"
+                            f"{E['dot']} {mono('.c 12345')} {sc('se login complete karo')}")
+    await _del_after(conf, 20)
+
+
+@register_cmd("c", owner_only=True)
+async def cmd_c(event, arg):
+    code = (arg or "").strip()
+    if not code or not PENDING:
+        return await eor(event, f"{E['warn']} {sc('koi pending login nahi')} {E['arrow']} {mono('.addbot +91XXXXXXXXXX')}")
+    phone, data = list(PENDING.items())[-1]
+    try:
+        await data["client"].sign_in(phone, code, phone_code_hash=data["hash"])
+        SUBBOTS[phone] = data["client"]
+        PENDING.pop(phone, None)
+        await done(event, f"{E['ok']} {sc('login complete')} {E['arrow']} {mono(phone)}\n"
+                          f"{E['dot']} {mono('.user')} {sc('se list dekho')}", secs=10)
+    except Exception as e:
+        name = type(e).__name__
+        if "SessionPasswordNeeded" in name or "password" in str(e).lower():
+            return await eor(event, f"{E['lock']} {sc('2fa chahiye')} {E['arrow']} {mono('.p <password>')}")
+        await eor(event, f"{E['no']} {sc('login fail')} {E['arrow']} {mono(str(e)[:70])}")
+
+
+@register_cmd("p", owner_only=True)
+async def cmd_p(event, arg):
+    pwd = (arg or "").strip()
+    if not pwd or not PENDING:
+        return await eor(event, f"{E['dot']} {mono('.p <2fa password>')}")
+    phone, data = list(PENDING.items())[-1]
+    try:
+        await data["client"].sign_in(password=pwd)
+        SUBBOTS[phone] = data["client"]
+        PENDING.pop(phone, None)
+        await done(event, f"{E['ok']} {sc('2fa login complete')} {E['arrow']} {mono(phone)}", secs=10)
+    except Exception as e:
+        await eor(event, f"{E['no']} {sc('login fail')} {E['arrow']} {mono(str(e)[:70])}")
+
+
+@register_cmd("user", owner_only=True)
+async def cmd_user(event, arg):
+    lines = [top(), sub(f"{E['bot']} {sc('connected userbots')}"), sub("")]
+    if not SUBBOTS:
+        lines.append(sub(f" {E['warn']} {sc('koi extra userbot nahi')}"))
+        lines.append(sub(f" {E['dot']} {mono('.addbot +91XXXXXXXXXX')}"))
+    for i, (phone, cl) in enumerate(SUBBOTS.items(), 1):
+        try:
+            me = await cl.get_me()
+            nm = f"{me.first_name} ({me.id})"
+        except Exception:
+            nm = "not ready"
+        lines.append(sub(f" {E['dot']} {mono(str(i))} ‣ {mono(phone)} · {nm}"))
+    if PENDING:
+        lines.append(sub(""))
+        lines.append(sub(f" {E['wait']} {sc('pending')} ‣ {mono(', '.join(PENDING))}"))
+    lines += [sub(""), sub(FOOT), f"╰{'─' * 30}╯"]
+    await eor(event, "\n".join(lines))
+
+
+# ══════════════════════════════════════════════════════════════
+#                     ɢᴀᴍᴇ ʙᴏᴛ ʙʀɪᴅɢᴇ
+# ══════════════════════════════════════════════════════════════
+@register_cmd("setgame", owner_only=True)
+async def cmd_setgame(event, arg):
+    global GAME_BOT
+    if not arg:
+        return await eor(event, f"{E['dice']} {sc('game bot')} {E['arrow']} {mono(GAME_BOT or 'none')}\n"
+                                f"{E['dot']} {mono('.setgame @gamebot')}")
+    GAME_BOT = arg.strip()
+    save_json(F_GAMEBOT, GAME_BOT)
+    await done(event, f"{E['dice']} {sc('game bot set')} {E['arrow']} {mono(GAME_BOT)}", secs=8)
+
+
+async def _game(event, cmd, arg=""):
+    if not GAME_BOT:
+        return await eor(event, f"{E['warn']} {sc('pehle')} {mono('.setgame @gamebot')} {sc('karo')}")
+    text = f"/{cmd}" + (f" {arg}" if arg else "")
+    try:
+        await bot.send_message(GAME_BOT, text)
+        conf = await eor(event, f"{E['dice']} {mono(text)} {E['arrow']} {mono(GAME_BOT)}\n"
+                                 f"{E['dot']} {sc('bhej diya')}")
+        await _del_after(conf, 5)
+    except Exception as e:
+        await eor(event, f"{E['no']} {sc('bhej nahi paya')} {E['arrow']} {mono(str(e)[:60])}")
+
+
+@register_cmd("rob", owner_only=True)
+async def cmd_rob(event, arg):
+    await _game(event, "rob", (arg or "").strip())
+
+
+@register_cmd("kill", owner_only=True)
+async def cmd_kill(event, arg):
+    await _game(event, "kill", (arg or "").strip())
+
+
+@register_cmd("auto", owner_only=True)
+async def cmd_auto(event, arg):
+    await _game(event, "auto", (arg or "").strip())
+
+
+@register_cmd("roboff", "killoff", "autooff", "stoprob", owner_only=True)
+async def cmd_roboff(event, arg):
+    await _game(event, "stop")
+
+
+@register_cmd("resetdone", owner_only=True)
+async def cmd_resetdone(event, arg):
+    await _game(event, "resetdone")
+
+
+@register_cmd("solve", owner_only=True)
+async def cmd_solve(event, arg):
+    if not arg:
+        return await eor(event, f"{E['dot']} {mono('.solve <code>')}")
+    await _game(event, "solve", arg.strip())
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3326,7 +4758,7 @@ def _story(name, frames):
     return runner
 
 
-for _name, _frames in [
+for _n, _f in [
     ("love1", LOVE1_COLLEGE), ("love2", LOVE2_INSTA), ("love3", LOVE3_OFFICE),
     ("love4", LOVE4_DISTANCE), ("love5", LOVE5_SHAADI),
     ("lovestory", LOVE_STORY_FRAMES),
@@ -3334,15 +4766,24 @@ for _name, _frames in [
     ("fun4", BACK4_UDHAAR), ("fun5", BACK5_FLIRT), ("fun6", LOVE6_THUG),
     ("fun7", MEME_MUMMY), ("fun8", MEME_SASTA_NASHA),
 ]:
-    register_cmd(_name)(_story(_name, _frames))
+    register_cmd(_n)(_story(_n, _f))
+
+
 
 
 # ══════════════════════════════════════════════════════════════
-#                      ᴡᴀᴛᴄʜᴇʀ (incoming)
+#                     ᴡᴀᴛᴄʜᴇʀ (incoming)
 # ══════════════════════════════════════════════════════════════
-async def _gban_enforce(chat, uid):
+MSG_CACHE: Dict[int, Dict[int, Any]] = {}
+
+
+def _cache_msg(chat, msg):
     try:
-        await bot.edit_permissions(chat, uid, view_messages=False)
+        c = MSG_CACHE.setdefault(int(chat), {})
+        c[int(msg.id)] = msg
+        if len(c) > 300:
+            for k in sorted(c)[:100]:
+                c.pop(k, None)
     except Exception:
         pass
 
@@ -3357,6 +4798,8 @@ async def watcher(event):
         if not sender:
             return
         text = event.raw_text or ""
+
+        _cache_msg(chat, event.message)
 
         # ── GLOBAL BAN ──
         if sender in GBAN and not is_admin(sender):
@@ -3375,10 +4818,20 @@ async def watcher(event):
             return
 
         # ── LOCAL MUTE (delete engine) ──
-        if sender in MUTED or sender in GLOBAL_MUTED:
-            if not is_admin(sender):
-                await silent_delete(event)
-                return
+        if (sender in MUTED or sender in GLOBAL_MUTED) and not is_admin(sender):
+            await silent_delete(event)
+            return
+
+        # ── REPLY-LOCK (.rlock) ──
+        rl = (RLOCK.get(str(chat)) or {}).get(str(sender))
+        if rl and not is_admin(sender):
+            await silent_delete(event)
+            try:
+                note = await event.respond(f"{E['lock']} {rl}")
+                asyncio.create_task(_del_after(note, 6))
+            except Exception:
+                pass
+            return
 
         # ── GROUP LOCKS (0.3s me udaa do) ──
         locked = LOCKS.get(str(chat))
@@ -3386,6 +4839,28 @@ async def watcher(event):
             if media_kinds(event.message) & set(locked):
                 await asyncio.sleep(LOCK_DELAY)
                 await silent_delete(event)
+                return
+
+        # ── SPAM GUARD (.watchspam) ──
+        cfg = SPAMWATCH.get(str(chat))
+        if cfg and not is_admin(sender):
+            key = f"{chat}:{sender}"
+            now = time.time()
+            bucket = SPAM_BUCKET.setdefault(key, [])
+            bucket.append(now)
+            SPAM_BUCKET[key] = [t for t in bucket if now - t <= cfg["sec"]]
+            if len(SPAM_BUCKET[key]) > cfg["limit"]:
+                SPAM_BUCKET[key] = []
+                await silent_delete(event)
+                ok, _ = await _act_mute(chat, sender)
+                if not ok:
+                    MUTED.add(sender)
+                try:
+                    w = await event.respond(f"{E['eye']} {sc('spam detected')} {E['arrow']} "
+                                            f"{mono(str(sender))} {sc('muted')}")
+                    asyncio.create_task(_del_after(w, 6))
+                except Exception:
+                    pass
                 return
 
         # ── AUTO READ ──
@@ -3404,12 +4879,21 @@ async def watcher(event):
             except Exception:
                 pass
 
+        # ── USER AUTO REPLY (.arreply) ──
+        if sender in USER_REPLY and text and not text.startswith(PREFIX):
+            try:
+                await event.reply(USER_REPLY[sender])
+            except FloodWaitError as fw:
+                await asyncio.sleep(fw.seconds)
+            except Exception:
+                pass
+
         # ── AFK AUTO REPLY ──
         if AFK["active"] and (event.is_private or getattr(event, "mentioned", False)):
             if AFK_LAST.get(chat, 0) < time.time() - 45:
                 AFK_LAST[chat] = time.time()
                 try:
-                    await event.reply(f"💤 AFK — `{AFK['reason']}`")
+                    await event.reply(f"{E['moon']} {sc('afk')} {E['arrow']} {mono(AFK['reason'] or 'AFK')}")
                 except Exception:
                     pass
 
@@ -3478,7 +4962,7 @@ async def watcher(event):
             except Exception:
                 pass
 
-        # ── RR RAID (+🤣 reaction) ──
+        # ── RR RAID (+ reaction) ──
         if sender in rr_users:
             try:
                 bot_msg = await event.reply(random.choice(fun_texts))
@@ -3530,11 +5014,40 @@ async def watcher(event):
 
 
 # ══════════════════════════════════════════════════════════════
-#                      ᴡᴀᴛᴄʜᴇʀ (outgoing)
+#                   ᴀɴᴛɪ-ᴅᴇʟᴇᴛᴇ
+# ══════════════════════════════════════════════════════════════
+@bot.on(events.MessageDeleted)
+async def on_deleted(event):
+    try:
+        chat = event.chat_id
+        if chat is None:
+            return
+        if int(chat) not in ANTIDEL:
+            return
+        cache = MSG_CACHE.get(int(chat)) or {}
+        for mid in (getattr(event, "deleted_ids", None) or []):
+            m = cache.pop(int(mid), None)
+            if m is None:
+                continue
+            try:
+                await bot.send_message(
+                    "me", f"{E['eye']} {sc('anti-delete')}\n"
+                          f"{E['gem']} {sc('chat')} {mono(str(chat))} · {sc('id')} {mono(str(mid))}")
+                try:
+                    await bot.forward_messages("me", m)
+                except Exception:
+                    await bot.send_message("me", m)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[ANTIDEL] {str(e)[:60]}")
+
+
+# ══════════════════════════════════════════════════════════════
+#                     ᴡᴀᴛᴄʜᴇʀ (outgoing)
 # ══════════════════════════════════════════════════════════════
 @bot.on(events.NewMessage(outgoing=True))
 async def outgoing_watcher(event):
-    # auto react on own messages
     emoji = AUTO_REACT_EMOJI
     if emoji:
         try:
@@ -3549,7 +5062,6 @@ async def outgoing_watcher(event):
         except Exception:
             pass
 
-    # ghost mode — apne messages auto delete (commands chhod kar)
     if GHOST["on"]:
         if (event.raw_text or "").startswith(PREFIX):
             return
@@ -3586,18 +5098,20 @@ async def dispatcher(event):
     if sender != OWNER_ID:
         if sender not in ADMINS:
             try:
-                await event.reply("♛ 𝐍𝐈𝐊 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 — 𝐎𝐰𝐧𝐞𝐫/𝐀𝐝𝐦𝐢𝐧 𝐨𝐧𝐥𝐲 ❖")
+                n = await event.reply(f"{E['crown']} {sb('NIK USERBOT')} {E['arrow']} "
+                                      f"{sc('owner / sudo only')} {E['lock']}")
+                asyncio.create_task(_del_after(n, 5))
             except Exception:
                 pass
             return
         if data.get("owner_only") or cmd in OWNER_ONLY_EXTRA:
-            await eor(event, "❌ Owner only command ♛")
+            await flash(event, f"{E['no']} {sc('owner only command')} {E['crown']}", secs=5)
             return
 
     if data.get("group_only"):
         try:
             if not event.is_group:
-                await eor(event, "⚠️ Ye command sirf group me chalti hai")
+                await flash(event, f"{E['warn']} {sc('ye command sirf group me chalti hai')}", secs=5)
                 return
         except Exception:
             return
@@ -3605,7 +5119,8 @@ async def dispatcher(event):
     if data.get("needs_reply"):
         try:
             if not event.is_reply and not arg:
-                await eor(event, f"❌ Reply ya target do\n👉 `{PREFIX}{cmd} @user / id`")
+                await flash(event, f"{E['no']} {sc('reply ya target do')}\n"
+                                   f"{E['dot']} {mono(PREFIX + cmd + ' @user / id')}", secs=5)
                 return
         except Exception:
             return
@@ -3614,12 +5129,12 @@ async def dispatcher(event):
         await data["func"](event, arg)
     except FloodWaitError as e:
         try:
-            await eor(event, f"⏳ FloodWait → `{e.seconds}s`")
+            await eor(event, f"{E['wait']} {sc('floodwait')} {E['arrow']} {mono(str(e.seconds) + 's')}")
         except Exception:
             pass
     except Exception as e:
         try:
-            await eor(event, f"❌ Error → `{str(e)[:60]}`")
+            await eor(event, f"{E['no']} {sc('error')} {E['arrow']} {mono(str(e)[:70])}")
         except Exception:
             pass
 
@@ -3631,25 +5146,24 @@ async def main():
     try:
         await bot.start()
         me = await bot.get_me()
-        uname = f"@{me.username}" if getattr(me, "username", None) else "NoUsername"
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print(f"♛ {BOT_NAME} {VERSION} STARTED")
-        print(f"👤 {me.first_name} ({uname})")
-        print(f"🆔 {me.id}")
-        print(f"❖ Commands loaded: {len(commands)}")
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        un = f"@{me.username}" if getattr(me, "username", None) else "NoUsername"
+        print("─" * 42)
+        print(f"  {scrb('Nik Userbot')} {VERSION}  ·  ɢʟᴏʙᴀʟ")
+        print(f"  {me.first_name} ({un})  —  {me.id}")
+        print(f"  commands loaded: {len(commands)}")
+        print("─" * 42)
 
         while True:
             try:
                 await bot.run_until_disconnected()
                 break
             except (ConnectionError, OSError):
-                print("⚠️ Connection lost → reconnecting…")
+                print("⚠️ connection lost → reconnecting…")
                 await asyncio.sleep(3)
     except KeyboardInterrupt:
-        print("\n🛑 Stopped manually")
+        print("\n🛑 stopped manually")
     except Exception as e:
-        print(f"\n❌ Startup error → {str(e)[:120]}")
+        print(f"\n❌ startup error → {str(e)[:140]}")
     finally:
         try:
             if bot.is_connected():

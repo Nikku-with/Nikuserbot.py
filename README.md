@@ -1,6 +1,6 @@
 # ♛ NIK USERBOT
 
-Single-file Telethon userbot — **Global** mode.
+Single-file Telethon userbot — **Global** mode · **193 commands** · styled output
 
 ## Setup
 
@@ -28,38 +28,54 @@ Pehli baar phone number + OTP maangega, phir `aeris.session` ban jayegi.
 
 ## Commands
 
-Saare commands `.` se shuru hote hain. Poora list → `.menu`
+Saare commands `.` se shuru hote hain. Har command ke saath guide line → `.menu`
 
 | Group | Commands |
 |---|---|
-| Core | `.alive .ping .status .menu .id .info .help .speed` |
-| Messaging | `.hy .del .forward .save .savelist .fwd .delsave .setchannel .purge .purgeme .delmine .filter .filters .unfilter` |
-| Auto | `.autoread group/private/channel/all on/off` · `.areply .stopareply` · `.afk .unafk` · `.ghost on/off` · `.echo .unecho` · `.ar .sar` |
-| Blacklist | `.addbl .delbl .listbl` · `.add-bcdb .del-bcdb .list-bcdb` · `.join .leave` |
-| Broadcast | `.gcast .ucast .bc group/all/private/db` · `.autobc add/on/off/get/del/delay` · `.autofw add/on/off/get/del/delay` |
-| Group mod | `.kick .delkick .ban .delban .unban .mute .delmute .unmute .getmute .staff .promote .fullpromote .demote .title .pin .unpin .group title/desc .lock .unlock .locks` |
-| Global | `.gban .ungban .gbanlist` · `.gmute .ungmute .gmutelist` |
-| Raid | `.reply .sreply .rr .srr .flag .sflag .hrr .shrr .replygod .sgod .replyyorichi .syorichi .nikreply .nik .raidstopall .bomb .gali` |
-| Spam | `.spray .dspray .spam .mspam .delayspam .purgeall .tagall .stop` |
-| GC tools | `.fastgc set <title {emoji}> / stop` · `.addbots` · `.addadmin .deladmin .admins` |
-| Tools | `.tts .qrcode .fancy .style .emoji .calc .weather .ip .short .music .copy .normal` |
-| Notes | `.notesadd .noteslist .notesdelete .banner .rembanner` |
-| Stories | `.love1 … .love5 .lovestory` · `.fun1 … .fun8` |
+| core | .menu .alive .ping .status .uptime .id .info .help .speed |
+| messaging | .hy .del .forward .save .savelist .fwd .delsave .setchannel .purge .purgeme .delmine .filter .filters .unfilter |
+| auto | .autoread .areply .stopareply .arreply .sarreply .arviyom .sarviyom .afk .unafk .ghost .echo .unecho .ar .sar .art .sart |
+| blacklist | .addbl .delbl .listbl .add-bcdb .del-bcdb .list-bcdb .join .leave |
+| broadcast | .gcast .ucast .bc .autobc .autofw |
+| group mod | .kick .delkick .ban .delban .unban .mute .delmute .unmute .tmute .getmute .staff .promote .fullpromote .demote .title .pin .unpin .group .tagall .banall .lock .unlock .locks .slock |
+| global | .gban .ungban .gbanlist .gmute .ungmute .gmutelist |
+| protection | .antidel .watchspam .unwatchspam .setgpfp .autogpfp .stopgpfp .rlock .srlock |
+| media | .yt .ig .pt .fb .music |
+| fun | .tictactoe .ttt .rps .roll .flip .fact .bomb .love |
+| ai & sudo | .ai .sudo .delsudo .list sudo |
+| bot manager | .addbots .listbots .invitebots .promotebots |
+| raid | .reply .sreply .rr .srr .flag .sflag .hrr .shrr .replygod .sgod .replyyorichi .syorichi .nikreply .nik .raidstopall .stopall .gali |
+| spam | .spray .dspray .sspam .spam .mspam .delayspam .d .purgeall .tagall .stop |
+| gc tools | .fastgc .copy .normal |
+| tools | .tts .qrcode .fancy .style .emoji .calc .weather .ip .short |
+| notes | .notesadd .noteslist .notesdelete .banner .rembanner |
+| stories | .love1 .love2 .love3 .love4 .love5 .lovestory .fun1 .fun2 .fun3 .fun4 .fun5 .fun6 .fun7 .fun8 |
 
 ## Notes
 
-* **`.purge`** — reply ke saath: reply se command tak sab uda deta hai.
-  Bina reply: `.purge 200` → command ke upar ke 200 purane messages.
-* **`.purgeme <n>`** is chat me apne messages · **`.delmine <n> [@chat]`** specific chat me apne messages.
-* **`.lock all`** — locked group me kisi bhi non-admin ka message `0.3s` me delete.
-  Types: `all msg text media photo video document sticker gif audio voice link forward command inline poll contact location game dice webpage`
-* **`.nikreply <count> <text>`** (reply ke saath) — us user ko N baar wo text bhejta hai. Band → `.nik`
+* **`.purge`** — reply ke saath: *replied message ke niche (baad) ka sab* uda deta hai
+  (reply + command samet). Bina reply: `.purge 200` → 200 purane messages.
+  **Bina reply aur bina count → error** (andaza nahi lagata).
+* **`.purgeme <n>`** is chat me apne n messages · **`.delmine [n] [@chat]`** —
+  us chat ke **saare** apne messages (koi 20 ka cap nahi).
+* **`.lock <type>` / `.slock`** — `.lock all` aur `.slock` group ke sab members ko
+  **mute** bhi kar dete hain; locked chat me non-admin ka message **0.3s** me delete.
+  `.unlock all` sabko wapas unmute karta hai. Types: `all msg text media photo video
+  document sticker gif audio voice link forward command inline poll contact location
+  game dice webpage`
+* **`.info` / `.id`** — reply, `@username`, ya **kuch nahi** (DM me khud detect kar leta hai).
+* Har **status/progress** message ~**3 sec** me apne aap delete.
+* **`.fwd`** — replied message Saved Messages me bhejta hai (`.save` se store karo, `.fwd <n>` se wapas).
+* **`.music` / koi bhi audio** — caption me `Powered by @Nikkkwa` credit ke saath.
+* **`.speed <seconds>`** — story animation ki speed (default `1.6s`).
+* **`.nikreply <count> <text>`** (reply ke saath) — us user ko N baar wo text. Band → `.nik`
 * **`.ghost on 30`** — apne outgoing messages 30s me auto-delete (commands chhod kar).
-* **`.speed <seconds>`** — story animation ki speed (default `1.6s`, pehle `0.5s` tha).
-* Owner-only: `copy normal addadmin deladmin admins gban ungban gmute ungmute gcast ucast bc autobc autofw join leave purgeall fastgc addbots spray dspray` — baaki sab admin bhi chala sakta hai.
+* **Owner-only**: `copy normal addadmin deladmin admins gban ungban gmute ungmute gcast
+  ucast bc autobc autofw join leave purgeall fastgc addbots invitebots promotebots spray
+  dspray banall addbot c p user setgame rob kill solve` — baaki sab admin bhi chala sakta hai.
+* **Access**: sirf owner + sudo users. Baaki logon ko auto-delete hone wala "owner / sudo only" reply.
 
 ## Files
 
 * `Nik_userbot.py` — poora bot (single file)
 * `data/` — runtime state (admins, filters, blacklist, gban/gmute, locks, bcdb, saved msgs)
-* `Nik_userbot_FINAL_V3*.py` — purane backups (ab use mat karna)
